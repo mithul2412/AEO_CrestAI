@@ -1,0 +1,47 @@
+import { render, screen, fireEvent } from '@testing-library/react'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import Chat from './Chat.jsx'
+
+function createJsonResponse(data, status = 200) {
+  return {
+    ok: status >= 200 && status < 300,
+    status,
+    headers: {
+      get: () => 'application/json',
+    },
+    json: async () => data,
+    text: async () => JSON.stringify(data),
+  }
+}
+
+describe('Chat', () => {
+  beforeEach(() => {
+    vi.stubGlobal('fetch', vi.fn())
+  })
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('shows a model toggle and switches between model responses for the same turn', async () => {
+    fetch.mockResolvedValueOnce(createJsonResponse({
+      responses: [
+        { model: 'Llama 3.3', response: 'Llama answer with **one** strong fix.' },
+        { model: 'Nemotron 120B', response: 'Nemotron answer with `two` stronger fixes.' },
+      ],
+    }))
+
+    render(<Chat markdown="# Test page" stage="post-fetch" />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'What GEO/GEU signals are missing from this content?' }))
+
+    expect(await screen.findByText(/Llama answer with/)).toBeInTheDocument()
+    expect(screen.getByRole('group', { name: 'Select model' })).toBeInTheDocument()
+    expect(screen.queryByText(/Nemotron answer with/)).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Nemotron' }))
+
+    expect(await screen.findByText(/Nemotron answer with/)).toBeInTheDocument()
+    expect(screen.queryByText(/Llama answer with/)).not.toBeInTheDocument()
+  })
+})
