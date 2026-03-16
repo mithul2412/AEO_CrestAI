@@ -1,3 +1,5 @@
+import InfoTip from './InfoTip.jsx'
+
 function scoreLabel(score) {
   if (score == null) return { text: '', color: 'var(--text-3)' }
   if (score >= 80) return { text: 'Excellent', color: 'var(--success)' }
@@ -20,7 +22,19 @@ function confidenceBadge(score) {
   return { cls: 'badge badge-low', label: 'LOW' }
 }
 
-export default function Verdicts({ verdicts, queryScore, contentScore, gapScore, modelStatus = [] }) {
+function copyToClipboard(value) {
+  if (!value) return
+  navigator.clipboard?.writeText(value)
+}
+
+export default function Verdicts({
+  verdicts,
+  queryScore,
+  contentScore,
+  gapScore,
+  modelStatus = [],
+  onSendToChat,
+}) {
   if ((!verdicts || verdicts.length === 0) && modelStatus.length === 0) return null
 
   const respondedCount = modelStatus.filter(model => model.status === 'ok').length
@@ -65,13 +79,37 @@ export default function Verdicts({ verdicts, queryScore, contentScore, gapScore,
               ? 'This is a partial result. The average query score is based on the models that responded successfully.'
               : 'This stage shows how directly the page answers the target query across both models.'}
           </div>
+
+          {contentScore != null && queryScore != null && (
+            <div className="query-comparison-bars">
+              <div className="query-comparison-row">
+                <span className="query-comparison-label">Baseline</span>
+                <div className="query-comparison-track">
+                  <span className="query-comparison-fill baseline" style={{ width: `${contentScore}%` }} />
+                </div>
+                <span className="query-comparison-value">{contentScore}</span>
+              </div>
+              <div className="query-comparison-row">
+                <span className="query-comparison-label">Query</span>
+                <div className="query-comparison-track">
+                  <span className="query-comparison-fill query" style={{ width: `${queryScore}%` }} />
+                </div>
+                <span className="query-comparison-value">{queryScore}</span>
+              </div>
+            </div>
+          )}
         </div>
 
         {gap !== null && (() => {
           const label = gapLabel(gap)
           return (
             <div className="query-summary-card query-summary-card-gap">
-              <div className="agreement-left-label">Gap readout</div>
+              <div className="gap-readout-label">
+                <span className="agreement-left-label">Content-Query Gap</span>
+                <InfoTip label="Content-Query Gap" align="end">
+                  This score shows whether your query-specific content is stronger or weaker than the rest of the page.
+                </InfoTip>
+              </div>
               <div className="gap-verdict-callout">
                 <span className="gap-verdict-delta" style={{ color: label.color }}>
                   {gap >= 0 ? '+' : ''}{gap}
@@ -143,7 +181,7 @@ export default function Verdicts({ verdicts, queryScore, contentScore, gapScore,
 
               {verdict.verdict && (
                 <div className="verdict-panel">
-                  <div className="verdict-panel-label">Read</div>
+                  <div className="verdict-panel-label">See full verdict -&gt;</div>
                   <div className="verdict-text">{verdict.verdict}</div>
                 </div>
               )}
@@ -159,6 +197,24 @@ export default function Verdicts({ verdicts, queryScore, contentScore, gapScore,
                 <div className="verdict-panel verdict-panel-fix">
                   <div className="verdict-panel-label">Suggested fix</div>
                   <div className="verdict-fix">{verdict.suggestedFix}</div>
+                  <div className="verdict-actions">
+                    <button
+                      type="button"
+                      className="chip"
+                      aria-label={`Copy suggested fix from ${verdict.model}`}
+                      onClick={() => copyToClipboard(verdict.suggestedFix)}
+                    >
+                      Copy fix
+                    </button>
+                    <button
+                      type="button"
+                      className="chip chip-primary"
+                      aria-label={`Send suggested fix from ${verdict.model} to Expert Chat`}
+                      onClick={() => onSendToChat?.(verdict)}
+                    >
+                      Send to Expert Chat
+                    </button>
+                  </div>
                 </div>
               )}
             </div>

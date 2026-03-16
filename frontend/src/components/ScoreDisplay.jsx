@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import ParticleLoader from './ParticleLoader.jsx'
+import InfoTip from './InfoTip.jsx'
 
 function scoreLabel(score) {
   if (score == null) return { text: '', color: 'var(--text-3)' }
@@ -100,14 +101,31 @@ function ScoreRing({ score, color, size = 112, strokeWidth = 7 }) {
   )
 }
 
+function metricTooltip(label) {
+  if (label === 'GEU') {
+    return 'Generative Engine Usability: how easily an AI can understand and trust your content.'
+  }
+  if (label === 'LLM Score') {
+    return 'Model baseline: how reusable the page looks to answer engines before a query is applied.'
+  }
+  return ''
+}
+
 function MetricCard({ label, sublabel, score, lockedText }) {
   const semantic = scoreLabel(score)
+  const tooltip = metricTooltip(label)
+  const labelNode = (
+    <div className="score-trio-label-wrap">
+      <span className="score-trio-label">{label}</span>
+      {tooltip && <InfoTip label={label}>{tooltip}</InfoTip>}
+    </div>
+  )
 
   if (typeof score !== 'number') {
     return (
       <div className="score-trio-item locked">
         <div className="metric-score-head">
-          <div className="score-trio-label">{label}</div>
+          {labelNode}
           <div className="score-trio-meta">Locked</div>
         </div>
         <div className="metric-score-visual">
@@ -124,7 +142,7 @@ function MetricCard({ label, sublabel, score, lockedText }) {
   return (
     <div className="score-trio-item">
       <div className="metric-score-head">
-        <div className="score-trio-label">{label}</div>
+        {labelNode}
         <div className="score-trio-meta" style={{ color: semantic.color }}>{semantic.text}</div>
       </div>
       <div className="metric-score-visual">
@@ -180,6 +198,60 @@ export default function ScoreDisplay({ results, loading, error = '', onRetry = n
   const gap = results?.gapScore ?? (results?.queryScore != null ? results.contentScore - results.queryScore : null)
   const summary = summarizeResults(results, gap)
   const llmErrors = llmContentStatus.filter(status => status.status === 'error')
+  const activeChecks = activeTab === 'geo' ? checks : geuChecks
+  const checksBreakdown = (
+    <div className="hero-checks-section">
+      <div className="hero-checks-header">
+        <div>
+          <div className="details-heading">Checks breakdown</div>
+          <div className="details-subheading">
+            Retrieval, structure, and citation cues that shape how reusable the content feels.
+          </div>
+        </div>
+        <div className="checks-tabs">
+          <button
+            type="button"
+            className={`tab-btn${activeTab === 'geo' ? ' active geo' : ''}`}
+            onClick={() => setActiveTab('geo')}
+          >
+            Content {passedGeo}/{checks.length}
+          </button>
+          <button
+            type="button"
+            className={`tab-btn${activeTab === 'geu' ? ' active geu' : ''}`}
+            onClick={() => setActiveTab('geu')}
+          >
+            GEU {passedGeu}/{geuChecks.length}
+          </button>
+        </div>
+      </div>
+
+      <div className="checks-list">
+        {activeChecks.map((check, index) => (
+          <div
+            key={check.id}
+            className={`check-row${check.passed ? ' passed-row' : ''}`}
+            style={{ animationDelay: `${index * 30}ms` }}
+          >
+            <div className="check-left">
+              <div className={`check-icon${check.passed ? ' passed' : ''}`}>
+                {check.passed ? 'OK' : ''}
+              </div>
+              <span className={`check-name${check.passed ? ' passed' : ' failed'}`}>
+                {check.label}
+              </span>
+            </div>
+            <div className="check-right">
+              {check.lift && <span className="check-lift">{check.lift}</span>}
+              <span className={`check-weight${check.passed ? ' passed' : ' failed'}`}>
+                {check.weight} pts
+              </span>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
 
   return (
     <div>
@@ -215,6 +287,8 @@ export default function ScoreDisplay({ results, loading, error = '', onRetry = n
                     {llmContentModels.length}/{Math.max(llmContentModels.length + llmErrors.length, 1)} LLMs responded
                   </span>
                 </div>
+
+                {checksBreakdown}
               </div>
             )}
 
@@ -302,8 +376,13 @@ export default function ScoreDisplay({ results, loading, error = '', onRetry = n
                 </div>
 
                 <div className="gap-signal-readout">
-                  <div className="gap-signal-readout-right">
-                    <div className="gap-signal-metric-label">Content-Query Gap</div>
+                <div className="gap-signal-readout-right">
+                    <div className="gap-signal-label-row">
+                      <div className="gap-signal-metric-label">Content-Query Gap</div>
+                      <InfoTip label="Content-Query Gap" align="end">
+                        This score shows whether your query-specific content is stronger or weaker than the rest of the page.
+                      </InfoTip>
+                    </div>
                     <div className="gap-signal-verdict" style={{ color: label.color }}>{label.text}</div>
                   </div>
                 </div>
@@ -316,9 +395,6 @@ export default function ScoreDisplay({ results, loading, error = '', onRetry = n
               <div className="details-header">
                 <div>
                   <div className="details-heading">LLM content readout</div>
-                  <div className="details-subheading">
-                    Model-level baseline judgments of GEO readiness before any query is applied.
-                  </div>
                 </div>
               </div>
 
@@ -346,55 +422,6 @@ export default function ScoreDisplay({ results, loading, error = '', onRetry = n
             </div>
           )}
 
-          <div className="details-panel baseline-details-panel">
-            <div className="details-header">
-              <div>
-                <div className="details-heading">Checks breakdown</div>
-                <div className="details-subheading">
-                  Retrieval, structure, and citation cues that shape how reusable the content feels.
-                </div>
-              </div>
-              <div className="checks-tabs">
-                <button
-                  className={`tab-btn${activeTab === 'geo' ? ' active geo' : ''}`}
-                  onClick={() => setActiveTab('geo')}
-                >
-                  Content {passedGeo}/{checks.length}
-                </button>
-                <button
-                  className={`tab-btn${activeTab === 'geu' ? ' active geu' : ''}`}
-                  onClick={() => setActiveTab('geu')}
-                >
-                  GEU {passedGeu}/{geuChecks.length}
-                </button>
-              </div>
-            </div>
-
-            <div className="checks-list">
-              {(activeTab === 'geo' ? checks : geuChecks).map((check, index) => (
-                <div
-                  key={check.id}
-                  className={`check-row${check.passed ? ' passed-row' : ''}`}
-                  style={{ animationDelay: `${index * 30}ms` }}
-                >
-                  <div className="check-left">
-                    <div className={`check-icon${check.passed ? ' passed' : ''}`}>
-                      {check.passed ? 'OK' : ''}
-                    </div>
-                    <span className={`check-name${check.passed ? ' passed' : ' failed'}`}>
-                      {check.label}
-                    </span>
-                  </div>
-                  <div className="check-right">
-                    {check.lift && <span className="check-lift">{check.lift}</span>}
-                    <span className={`check-weight${check.passed ? ' passed' : ' failed'}`}>
-                      {check.weight} pts
-                    </span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
         </div>
       ) : error ? (
         <div className="score-empty-state">

@@ -28,7 +28,7 @@ const STAGE_META = {
   'post-fetch': {
     eyebrow: 'Context loaded',
     title: 'Ask for the next content fix.',
-    description: 'Start with structure, evidence, or schema gaps.',
+    description: '',
   },
   'post-query': {
     eyebrow: 'Query in focus',
@@ -197,13 +197,14 @@ function mapApiResponses(responses = []) {
   }, {})
 }
 
-export default function Chat({ markdown, stage = 'post-fetch', query = '' }) {
+export default function Chat({ markdown, stage = 'post-fetch', query = '', draft = '', draftToken = 0 }) {
   const [turns, setTurns] = useState([])
   const [input, setInput] = useState('')
   const [sending, setSending] = useState(false)
   const [error, setError] = useState('')
   const [showTemplate, setShowTemplate] = useState(false)
   const [viewModel, setViewModel] = useState(MODELS[0].className)
+  const [draftNotice, setDraftNotice] = useState('')
   const bottomRef = useRef(null)
 
   const chips = STAGE_SUGGESTIONS[stage] || STAGE_SUGGESTIONS['post-fetch']
@@ -213,6 +214,12 @@ export default function Chat({ markdown, stage = 'post-fetch', query = '' }) {
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [turns, sending])
+
+  useEffect(() => {
+    if (!draftToken || !draft) return
+    setInput(draft)
+    setDraftNotice('Draft loaded from verdict')
+  }, [draft, draftToken])
 
   const sendMessage = async (text) => {
     const userText = text || input.trim()
@@ -296,7 +303,9 @@ export default function Chat({ markdown, stage = 'post-fetch', query = '' }) {
       <div className="chat-panel-intro">
         <div>
           <div className="chat-panel-intro-title">{stageMeta.title}</div>
-          <div className="chat-panel-intro-copy">{stageMeta.description}</div>
+          {stageMeta.description && (
+            <div className="chat-panel-intro-copy">{stageMeta.description}</div>
+          )}
         </div>
         <span className="chat-panel-model-badge">{activeModel.id} visible</span>
       </div>
@@ -358,6 +367,7 @@ export default function Chat({ markdown, stage = 'post-fetch', query = '' }) {
       )}
 
       {error && <div className="error-bar">{error}</div>}
+      {draftNotice && <div className="chat-prefill-note">{draftNotice}</div>}
 
       <div className="chat-input-row">
         <input

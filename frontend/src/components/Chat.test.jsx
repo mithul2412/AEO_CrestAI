@@ -44,4 +44,19 @@ describe('Chat', () => {
     expect(await screen.findByText(/Nemotron answer with/)).toBeInTheDocument()
     expect(screen.queryByText(/Llama answer with/)).not.toBeInTheDocument()
   })
+
+  it('prefills the chat input when a verdict draft is provided', () => {
+    render(
+      <Chat
+        markdown="# Test page"
+        stage="post-verdict"
+        query="best ai crm"
+        draft={'Goal: improve the page for the query "best ai crm"'}
+        draftToken={123}
+      />
+    )
+
+    expect(screen.getByDisplayValue('Goal: improve the page for the query "best ai crm"')).toBeInTheDocument()
+    expect(screen.getByText('Draft loaded from verdict')).toBeInTheDocument()
+  })
 })

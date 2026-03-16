@@ -1,5 +1,5 @@
 import { act } from 'react'
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import App from './App.jsx'
 
@@ -63,6 +63,8 @@ const baselinePayload = {
   checks: [
     buildCheck('faq', 'FAQ structure', 20, true, '+11% citation lift'),
     buildCheck('stats', 'Statistics / numbers', 15, true, '+40% avg'),
+    buildCheck('schema', 'Structured data / schema', 15, false, '~ impact'),
+    buildCheck('llmstxt', 'llms.txt present', 10, false, '~ impact'),
   ],
   geuChecks: [
     buildCheck('standalone', 'Standalone sentences', 30, true, 'AutoGEO'),
@@ -114,6 +116,11 @@ describe('App', () => {
     expect(screen.getByText('Model baseline')).toBeInTheDocument()
     expect(screen.getByText('LLM content readout')).toBeInTheDocument()
     expect(screen.getByDisplayValue('https://example.com/article')).toBeInTheDocument()
+    expect(screen.getAllByText('Checks breakdown')).toHaveLength(1)
+
+    const hero = screen.getByText('Overall AEO Score').closest('.overall-score-hero')
+    expect(hero).not.toBeNull()
+    expect(within(hero).getByText('Checks breakdown')).toBeInTheDocument()
 
     const analyzeBody = JSON.parse(fetch.mock.calls[0][1].body)
     expect(analyzeBody.sourceSignals.llmsTxt.present).toBe(true)
@@ -139,6 +146,44 @@ describe('App', () => {
 
     expect(await screen.findByText('Baseline analysis failed: Analyze failed upstream')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Retry baseline scoring' })).toBeInTheDocument()
+  })
+
+  it('shows advanced optimization opportunities, query suggestions, and a locked preview before query scoring', async () => {
+    fetch.mockResolvedValueOnce(createJsonResponse(baselinePayload))
+
+    render(<App />)
+
+    fireEvent.change(screen.getByPlaceholderText('https://example.com/page-to-analyze'), {
+      target: { value: 'example.com/article' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Fetch Page' }))
+
+    await act(async () => {
+      MockEventSource.instances[0].emit('complete', {
+        markdown: '# Heading\n\nIntro copy',
+        charCount: 21,
+        sourceSignals: {
+          llmsTxt: { present: false, url: null },
+          llmsFullTxt: { present: false, url: null },
+        },
+      })
+    })
+
+    await screen.findByText('LLM Score')
+    expect(screen.getByText('3 opportunities - +25 pts potential')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Show optimizations' }))
+    expect(screen.getByText('Unlock +15 pts - Add structured data')).toBeInTheDocument()
+    expect(screen.getByText('Unlock +10 pts - Add llms.txt')).toBeInTheDocument()
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'See template' })[0])
+    expect(screen.getByText('llms.txt starter template')).toBeInTheDocument()
+    expect(screen.getByText(/Add a query to preview direct answer quality/)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Add a query to unlock' })).toBeInTheDocument()
+
+    const suggestion = screen.getByRole('button', { name: 'What is Example pricing?' })
+    fireEvent.click(suggestion)
+    expect(screen.getByDisplayValue('What is Example pricing?')).toBeInTheDocument()
   })
 
   it('preserves the baseline LLM score during query re-score and uses content-query gap semantics', async () => {
@@ -180,6 +225,11 @@ describe('App', () => {
     })
 
     await screen.findByText('LLM Score')
+    expect(screen.getByText('Unlock side-by-side fixes from both models.')).toBeInTheDocument()
+
+    const tooltipTrigger = screen.getByRole('button', { name: 'What does GEU mean?' })
+    fireEvent.focus(tooltipTrigger)
+    expect(screen.getByRole('tooltip')).toHaveTextContent('Generative Engine Usability')
 
     fireEvent.change(screen.getByPlaceholderText('e.g. what is the best CRM for small business?'), {
       target: { value: 'best ai crm' },
@@ -187,9 +237,10 @@ describe('App', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Re-Score with Query' }))
 
     await screen.findByText('Model verdicts')
-    expect(screen.getByText('Content-Query Gap')).toBeInTheDocument()
+    expect(screen.getAllByText('Content-Query Gap')).toHaveLength(2)
     expect(screen.getByText('LLM content readout')).toBeInTheDocument()
     expect(screen.getByText('Direct answer path is solid.')).toBeInTheDocument()
+    expect(screen.queryByText('Unlock side-by-side fixes from both models.')).not.toBeInTheDocument()
 
     const analyzeBody = JSON.parse(fetch.mock.calls[1][1].body)
     expect(analyzeBody.baselineLlmContentScore).toBe(66)
@@ -197,5 +248,8 @@ describe('App', () => {
     await waitFor(() => {
       expect(screen.getByText('High gap - direct answer quality trails the baseline content signals')).toBeInTheDocument()
     })
+
+    fireEvent.click(screen.getAllByRole('button', { name: /Send suggested fix from/ })[0])
+    expect(screen.getByDisplayValue(/Goal: improve the page for the query "best ai crm"/)).toBeInTheDocument()
   })
 })

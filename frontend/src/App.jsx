@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import UrlInput from './components/UrlInput.jsx'
 import ScoreDisplay from './components/ScoreDisplay.jsx'
 import Verdicts from './components/Verdicts.jsx'
@@ -6,6 +6,7 @@ import Chat from './components/Chat.jsx'
 import { readApiError } from './utils/api.js'
 
 const THEME_KEY = 'aeo-scorer-theme'
+const LLMS_TXT_POINTS = 10
 
 function getInitialTheme() {
   if (typeof window === 'undefined') return 'dark'
@@ -136,34 +137,6 @@ function getHeroContent({ hasFetched, hasQueryResults, contentAnalyzing, queryAn
   }
 }
 
-function getNextMove({ hasFetched, hasBaseline, hasQueryResults, contentAnalyzing, queryAnalyzing, query }) {
-  if (!hasFetched && !contentAnalyzing) {
-    return 'Fetch a live URL.'
-  }
-
-  if (contentAnalyzing) {
-    return 'Wait for the baseline to finish.'
-  }
-
-  if (!query.trim()) {
-    return 'Add the exact question you want to score.'
-  }
-
-  if (queryAnalyzing) {
-    return 'Wait for the query comparison to finish.'
-  }
-
-  if (hasQueryResults) {
-    return 'Review the biggest gap, then rewrite the weakest section.'
-  }
-
-  if (hasBaseline) {
-    return 'Run the query score next.'
-  }
-
-  return 'Fetch the page to begin.'
-}
-
 function getSignalTone(isPositive, isReady) {
   if (!isReady) return 'idle'
   return isPositive ? 'good' : 'muted'
@@ -181,6 +154,107 @@ function formatSnapshotUrl(rawUrl) {
   }
 }
 
+function formatBrand(rawUrl) {
+  if (!rawUrl) return 'this page'
+
+  try {
+    const normalizedUrl = /^https?:\/\//i.test(rawUrl) ? rawUrl : `https://${rawUrl}`
+    const hostname = new URL(normalizedUrl).hostname.replace(/^www\./, '')
+    const base = hostname.split('.')[0] || hostname
+    return base.charAt(0).toUpperCase() + base.slice(1)
+  } catch {
+    return 'this page'
+  }
+}
+
+function buildQuerySuggestions(rawUrl) {
+  const brand = formatBrand(rawUrl)
+  return [
+    `What is ${brand} pricing?`,
+    `How does ${brand} compare to competitors?`,
+    `What are the main ${brand} plans?`,
+  ]
+}
+
+function buildLlmsTemplate(rawUrl) {
+  const siteUrl = rawUrl || 'https://example.com/'
+  return `# llms.txt\nsite: ${siteUrl}\nsummary: Add a one-sentence summary of what this page or site is for.\npreferred:\n- ${siteUrl}\n- ${siteUrl.replace(/\/?$/, '/pricing')}\npolicies:\n- cite current pricing only\n- prefer answer-first sections\n- use page headings as section labels`
+}
+
+function buildLlmsFullTemplate(rawUrl) {
+  const siteUrl = rawUrl || 'https://example.com/'
+  return `# llms-full.txt\nsite: ${siteUrl}\nsummary: Add a richer overview of the site, products, and audience.\nkey_pages:\n- ${siteUrl}\n- ${siteUrl.replace(/\/?$/, '/faq')}\nstructured_sections:\n- pricing\n- plans\n- eligibility\n- support\ncitation_rules:\n- quote official pricing pages\n- prefer FAQ and support docs for policy answers`
+}
+
+function buildSchemaGuide(rawUrl) {
+  const siteUrl = rawUrl || 'https://example.com/'
+  return `Use JSON-LD on the page so answer engines can read page intent faster.\n\nExample:\n{\n  "@context": "https://schema.org",\n  "@type": "WebPage",\n  "name": "Page title",\n  "url": "${siteUrl}",\n  "description": "One-sentence page summary",\n  "mainEntity": {\n    "@type": "Thing",\n    "name": "Primary answer topic"\n  }\n}`
+}
+
+function buildAdvancedOptimizations({ checks = [], sourceSignals = {}, url, hasFetched }) {
+  const opportunities = []
+  const schemaCheck = checks.find(check => check.id === 'schema')
+  const llmsCheck = checks.find(check => check.id === 'llmstxt')
+
+  if (schemaCheck && !schemaCheck.passed) {
+    opportunities.push({
+      id: 'schema',
+      label: 'Structured data / schema',
+      headline: `Unlock +${schemaCheck.weight} pts - Add structured data`,
+      detail: 'Add JSON-LD so engines can identify the page, entity, and answer target faster.',
+      points: schemaCheck.weight,
+      actionLabel: 'Learn what this is',
+      drawerTitle: 'Structured data / schema',
+      drawerIntro: 'Use schema markup to make the page easier to classify and reuse.',
+      drawerContent: buildSchemaGuide(url),
+      drawerMode: 'guide',
+    })
+  }
+
+  if (hasFetched && !sourceSignals?.llmsTxt?.present) {
+    opportunities.push({
+      id: 'llms.txt',
+      label: 'llms.txt',
+      headline: `Unlock +${llmsCheck?.weight || LLMS_TXT_POINTS} pts - Add llms.txt`,
+      detail: 'Create a machine-readable summary so answer engines know which pages to prefer.',
+      points: llmsCheck?.weight || LLMS_TXT_POINTS,
+      actionLabel: 'See template',
+      drawerTitle: 'llms.txt starter template',
+      drawerIntro: 'Use this as a starter file and adapt the summary, preferred pages, and rules.',
+      drawerContent: buildLlmsTemplate(url),
+      drawerMode: 'template',
+    })
+  }
+
+  if (hasFetched && !sourceSignals?.llmsFullTxt?.present) {
+    opportunities.push({
+      id: 'llms-full.txt',
+      label: 'llms-full.txt',
+      headline: 'Add richer model-readable context with llms-full.txt',
+      detail: 'Use a fuller file when the site needs more structured instructions than the base file.',
+      points: 0,
+      actionLabel: 'See template',
+      drawerTitle: 'llms-full.txt starter template',
+      drawerIntro: 'Use this when you want to expose a fuller map of the site to AI systems.',
+      drawerContent: buildLlmsFullTemplate(url),
+      drawerMode: 'template',
+    })
+  }
+
+  const points = opportunities.reduce((sum, opportunity) => sum + opportunity.points, 0)
+  return { opportunities, points }
+}
+
+function buildChatDraft(query, verdict) {
+  return [
+    `Goal: improve the page for the query "${query || '<target query>'}"`,
+    verdict.topGap ? `Top gap: ${verdict.topGap}` : '',
+    verdict.suggestedFix ? `Suggested fix: ${verdict.suggestedFix}` : '',
+    verdict.verdict ? `Model verdict: ${verdict.verdict}` : '',
+    'Format: issues + rewrite + expected score impact',
+  ].filter(Boolean).join('\n')
+}
+
 export default function App() {
   const [url, setUrl] = useState('')
   const [markdown, setMarkdown] = useState('')
@@ -193,6 +267,10 @@ export default function App() {
   const [queryAnalyzing, setQueryAnalyzing] = useState(false)
   const [error, setError] = useState('')
   const [theme, setTheme] = useState(getInitialTheme)
+  const [advancedOpen, setAdvancedOpen] = useState(false)
+  const [drawer, setDrawer] = useState(null)
+  const [chatDraft, setChatDraft] = useState({ text: '', token: 0 })
+  const queryInputRef = useRef(null)
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme
@@ -227,6 +305,7 @@ export default function App() {
     setQuery('')
     setBaselineResults(null)
     setResults(null)
+    setDrawer(null)
     void handleBaselineAnalyze(nextMarkdown, nextSourceSignals)
   }, [handleBaselineAnalyze])
 
@@ -295,14 +374,6 @@ export default function App() {
       : 'post-fetch'
 
   const heroContent = getHeroContent({ hasFetched, hasQueryResults, contentAnalyzing, queryAnalyzing })
-  const nextMove = getNextMove({
-    hasFetched,
-    hasBaseline,
-    hasQueryResults,
-    contentAnalyzing,
-    queryAnalyzing,
-    query,
-  })
 
   const heroStats = [
     {
@@ -326,22 +397,6 @@ export default function App() {
 
   const sourceSignalCards = [
     {
-      label: 'llms.txt',
-      value: sourceSignals?.llmsTxt?.present ? 'Present' : hasFetched ? 'Missing' : 'Pending',
-      detail: sourceSignals?.llmsTxt?.present
-        ? sourceSignals.llmsTxt.url
-        : 'No file found.',
-      tone: getSignalTone(sourceSignals?.llmsTxt?.present, hasFetched),
-    },
-    {
-      label: 'llms-full.txt',
-      value: sourceSignals?.llmsFullTxt?.present ? 'Present' : hasFetched ? 'Missing' : 'Pending',
-      detail: sourceSignals?.llmsFullTxt?.present
-        ? sourceSignals.llmsFullTxt.url
-        : 'No file found.',
-      tone: getSignalTone(sourceSignals?.llmsFullTxt?.present, hasFetched),
-    },
-    {
       label: 'Page state',
       value: hasQueryResults ? 'Scored' : hasBaseline ? 'Baseline ready' : hasFetched ? 'Fetched' : 'Idle',
       detail: !hasFetched
@@ -354,6 +409,31 @@ export default function App() {
       tone: hasQueryResults || hasBaseline ? 'good' : hasFetched ? 'muted' : 'idle',
     },
   ]
+  const querySuggestions = buildQuerySuggestions(url)
+  const { opportunities, points: opportunityPoints } = buildAdvancedOptimizations({
+    checks: activeResults?.checks || [],
+    sourceSignals,
+    url,
+    hasFetched,
+  })
+  const opportunitySummary = opportunities.length === 0
+    ? 'No opportunities'
+    : `${opportunities.length} opportunit${opportunities.length === 1 ? 'y' : 'ies'} - +${opportunityPoints} pts potential`
+
+  const handleSendToChat = useCallback((verdict) => {
+    const draft = buildChatDraft(query.trim(), verdict)
+    setChatDraft({ text: draft, token: Date.now() })
+    document.getElementById('ask-expert')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }, [query])
+
+  const focusQueryInput = useCallback(() => {
+    queryInputRef.current?.focus()
+  }, [])
+
+  const handleCopyDrawer = useCallback(() => {
+    if (!drawer?.drawerContent) return
+    navigator.clipboard?.writeText(drawer.drawerContent)
+  }, [drawer])
 
   const snapshotItems = [
     {
@@ -420,23 +500,42 @@ export default function App() {
       <main className="main">
         <section className="hero-shell">
           <div className="panel panel-hero">
-            <div className="hero-eyebrow">{heroContent.eyebrow}</div>
-            <h1>{heroContent.title}</h1>
-            <p className="hero-copy-text">{heroContent.description}</p>
+            <div className="hero-layout">
+              <div className="hero-main">
+                <div className="hero-eyebrow">{heroContent.eyebrow}</div>
+                <h1>{heroContent.title}</h1>
+                <p className="hero-copy-text">{heroContent.description}</p>
 
-            <div className="hero-stat-grid">
-              {heroStats.map(stat => (
-                <div key={stat.label} className="hero-stat-card">
-                  <span className="hero-stat-label">{stat.label}</span>
-                  <strong className="hero-stat-value">{stat.value}</strong>
-                  <span className="hero-stat-detail">{stat.detail}</span>
+                <div className="hero-stat-grid">
+                  {heroStats.map(stat => (
+                    <div key={stat.label} className="hero-stat-card">
+                      <span className="hero-stat-label">{stat.label}</span>
+                      <strong className="hero-stat-value">{stat.value}</strong>
+                      <span className="hero-stat-detail">{stat.detail}</span>
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
+              </div>
 
-            <div className="hero-guidance">
-              <span className="hero-guidance-label">Next move</span>
-              <p>{nextMove}</p>
+              <div className="hero-side">
+                <div className="hero-tracker-card">
+                  <div className="rail-card-header">
+                    <div>
+                      <div className="rail-card-title">Progress</div>
+                      <div className="rail-card-subtitle">Small tracker for the current flow.</div>
+                    </div>
+                    <span className={`summary-pill ${hasFetched ? 'ok' : 'warn'}`}>
+                      {hasQueryResults ? 'Verdicts ready' : hasBaseline ? 'Baseline ready' : hasFetched ? 'Fetched' : 'Waiting'}
+                    </span>
+                  </div>
+
+                  <JourneyBar
+                    fetchStatus={fetchStatus}
+                    queryStatus={baselineStatus}
+                    resultsStatus={resultsStatus}
+                  />
+                </div>
+              </div>
             </div>
           </div>
         </section>
@@ -446,7 +545,6 @@ export default function App() {
             <div className="rail-card-header">
               <div>
                 <div className="rail-card-title">Analysis snapshot</div>
-                <div className="rail-card-subtitle">Page, score, query, and gap.</div>
               </div>
             </div>
 
@@ -466,42 +564,90 @@ export default function App() {
             </div>
           </div>
 
-          <div className="panel overview-card overview-card-tracker" style={{ animationDelay: '0.04s' }}>
-            <div className="rail-card-header">
-              <div>
-                <div className="rail-card-title">Progress</div>
-                <div className="rail-card-subtitle">Small tracker for the current flow.</div>
-              </div>
-              <span className={`summary-pill ${hasFetched ? 'ok' : 'warn'}`}>
-                {hasQueryResults ? 'Verdicts ready' : hasBaseline ? 'Baseline ready' : hasFetched ? 'Fetched' : 'Waiting'}
-              </span>
-            </div>
-
-            <JourneyBar
-              fetchStatus={fetchStatus}
-              queryStatus={baselineStatus}
-              resultsStatus={resultsStatus}
-            />
-          </div>
-
           <div className="panel overview-card overview-card-signals" style={{ animationDelay: '0.06s' }}>
             <div className="rail-card-header">
               <div>
-                <div className="rail-card-title">Source signals</div>
-                <div className="rail-card-subtitle">llms.txt and page state.</div>
+                <div className="rail-card-title">Advanced Optimizations</div>
               </div>
+              <button
+                type="button"
+                className="chip"
+                aria-expanded={advancedOpen}
+                onClick={() => setAdvancedOpen(value => !value)}
+              >
+                {advancedOpen ? 'Hide optimizations' : 'Show optimizations'}
+              </button>
             </div>
-            <div className="signal-stack">
-              {sourceSignalCards.map(signal => (
-                <div key={signal.label} className={`signal-card ${signal.tone}`}>
-                  <div className="signal-card-top">
-                    <span className="signal-card-label">{signal.label}</span>
-                    <span className="signal-card-value">{signal.value}</span>
-                  </div>
-                  <div className="signal-card-detail">{signal.detail}</div>
+            <div className="optimization-summary-row">
+              <span className={`summary-pill ${opportunities.length > 0 ? 'warn' : 'ok'}`}>{opportunitySummary}</span>
+            </div>
+            {advancedOpen && (
+              <div className="optimization-accordion-body">
+                <div className="signal-stack">
+                  {opportunities.length > 0 ? opportunities.map(opportunity => (
+                    <div key={opportunity.id} className="signal-card opportunity">
+                      <div className="signal-card-top">
+                        <span className="signal-card-label">{opportunity.label}</span>
+                        <span className="signal-card-value">
+                          {opportunity.points > 0 ? `+${opportunity.points} pts` : 'Info'}
+                        </span>
+                      </div>
+                      <div className="signal-card-opportunity">{opportunity.headline}</div>
+                      <div className="signal-card-detail">{opportunity.detail}</div>
+                      <button
+                        type="button"
+                        className="chip"
+                        onClick={() => setDrawer(opportunity)}
+                      >
+                        {opportunity.actionLabel}
+                      </button>
+                    </div>
+                  )) : (
+                    <div className="signal-card good">
+                      <div className="signal-card-top">
+                        <span className="signal-card-label">State</span>
+                        <span className="signal-card-value">Clear</span>
+                      </div>
+                      <div className="signal-card-detail">
+                        No high-signal technical opportunities are open right now.
+                      </div>
+                    </div>
+                  )}
+
+                  {sourceSignalCards.map(signal => (
+                    <div key={signal.label} className={`signal-card ${signal.tone}`}>
+                      <div className="signal-card-top">
+                        <span className="signal-card-label">{signal.label}</span>
+                        <span className="signal-card-value">{signal.value}</span>
+                      </div>
+                      <div className="signal-card-detail">{signal.detail}</div>
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
+
+                {drawer && (
+                  <div className="template-drawer" aria-labelledby={`template-drawer-${drawer.id}`}>
+                    <div className="template-drawer-head">
+                      <div>
+                        <div id={`template-drawer-${drawer.id}`} className="details-heading">{drawer.drawerTitle}</div>
+                        <div className="details-subheading">{drawer.drawerIntro}</div>
+                      </div>
+                      <button type="button" className="chip" onClick={() => setDrawer(null)}>
+                        Close
+                      </button>
+                    </div>
+                    <pre className="template-drawer-code">{drawer.drawerContent}</pre>
+                    <div className="template-drawer-actions">
+                      {drawer.drawerMode === 'template' && (
+                        <button type="button" className="chip chip-primary" onClick={handleCopyDrawer}>
+                          Copy template
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </section>
 
@@ -512,7 +658,6 @@ export default function App() {
                 <div className="section-kicker">Phase 01 / Fetch the live page</div>
                 <div className="section-title">Start with the source your users will actually land on</div>
               </div>
-              <div className="section-note">Live page to markdown.</div>
             </div>
             <UrlInput
               url={url}
@@ -528,7 +673,6 @@ export default function App() {
                   <div className="section-kicker">Phase 02 / Baseline score</div>
                   <div className="section-title">Read the page before you optimize the answer</div>
                 </div>
-              <div className="section-note">Structural score before query.</div>
               </div>
               <ScoreDisplay
                 results={activeResults}
@@ -546,20 +690,35 @@ export default function App() {
                   <div className="section-kicker">Phase 03 / Target query</div>
                   <div className="section-title">Stress-test the exact question the page needs to answer</div>
                 </div>
-                <div className="section-note">Score one exact question.</div>
               </div>
 
               <div className="query-helper">
                 Add the exact question to unlock Query Match, Gap, and verdicts.
               </div>
 
-              <input
-                className="query-input"
-                placeholder="e.g. what is the best CRM for small business?"
-                value={query}
-                onChange={e => setQuery(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && handleAnalyze()}
-              />
+              <div className={`query-input-shell${!query.trim() ? ' query-input-shell--primed' : ''}`}>
+                <input
+                  ref={queryInputRef}
+                  className="query-input query-input-prominent"
+                  placeholder="e.g. what is the best CRM for small business?"
+                  value={query}
+                  onChange={e => setQuery(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && handleAnalyze()}
+                />
+              </div>
+
+              <div className="query-suggestion-row">
+                {querySuggestions.map(suggestion => (
+                  <button
+                    key={suggestion}
+                    type="button"
+                    className="chip query-suggestion-chip"
+                    onClick={() => setQuery(suggestion)}
+                  >
+                    {suggestion}
+                  </button>
+                ))}
+              </div>
 
               <div className="query-actions">
                 <button
@@ -571,14 +730,31 @@ export default function App() {
                     ? <><span className="spinner" /> Analyzing...</>
                     : 'Re-Score with Query'}
                 </button>
-                <span className="query-last-scored">
-                  {results
-                    ? <>Last scored against: <em>{query || '(no query)'}</em></>
-                    : !hasBaseline
-                      ? 'Baseline running.'
-                      : 'Baseline ready for query scoring.'}
-                </span>
               </div>
+
+              {!query.trim() && hasBaseline && !hasQueryResults && (
+                <div className="query-locked-preview">
+                  <div className="query-locked-card">
+                    <span className="query-locked-label">Query Match</span>
+                    <strong className="query-locked-value">Locked</strong>
+                    <span className="query-locked-copy">Add a query to preview direct answer quality.</span>
+                  </div>
+                  <div className="query-locked-card">
+                    <span className="query-locked-label">Model verdicts</span>
+                    <strong className="query-locked-value">Locked</strong>
+                    <span className="query-locked-copy">Unlock side-by-side fixes from both models.</span>
+                  </div>
+                  <div className="query-locked-card query-locked-card--action">
+                    <span className="query-locked-label">Unlock</span>
+                    <strong className="query-locked-value">Next step</strong>
+                    <span className="query-locked-copy">Run one exact query to activate answer-path scoring and verdicts.</span>
+                    <button type="button" className="chip chip-primary" onClick={focusQueryInput}>
+                      Add a query to unlock
+                    </button>
+                  </div>
+                </div>
+              )}
+
               {error && <div className="error-bar">{error}</div>}
             </div>
           )}
@@ -599,6 +775,7 @@ export default function App() {
                 contentScore={results.contentScore}
                 gapScore={results.gapScore}
                 modelStatus={results.modelStatus || []}
+                onSendToChat={handleSendToChat}
               />
             </div>
           )}
@@ -606,7 +783,7 @@ export default function App() {
       </main>
 
       {markdown && (
-        <section className="ask-expert-section">
+        <section id="ask-expert" className="ask-expert-section">
           <div className="ask-expert-inner">
             <div className="ask-expert-header">
               <div>
@@ -622,7 +799,13 @@ export default function App() {
               </div>
             </div>
 
-            <Chat markdown={markdown} stage={chatStage} query={query.trim()} />
+            <Chat
+              markdown={markdown}
+              stage={chatStage}
+              query={query.trim()}
+              draft={chatDraft.text}
+              draftToken={chatDraft.token}
+            />
           </div>
         </section>
       )}
