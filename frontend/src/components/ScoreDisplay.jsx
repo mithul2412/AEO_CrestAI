@@ -189,6 +189,7 @@ function ScoreBand({ label, score, note, lockedText, accentColor }) {
 
 export default function ScoreDisplay({ results, loading, error = '', onRetry = null }) {
   const [activeTab, setActiveTab] = useState('geo')
+  const [checksOpen, setChecksOpen] = useState(false)
   const checks = results?.checks || []
   const geuChecks = results?.geuChecks || []
   const llmContentModels = results?.llmContentModels || []
@@ -201,54 +202,73 @@ export default function ScoreDisplay({ results, loading, error = '', onRetry = n
   const activeChecks = activeTab === 'geo' ? checks : geuChecks
   const checksBreakdown = (
     <div className="hero-checks-section">
-      <div className="hero-checks-header">
-        <div>
+      <div
+        role="button"
+        tabIndex={0}
+        className="hero-checks-accordion-trigger"
+        onClick={() => setChecksOpen(v => !v)}
+        onKeyDown={e => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault()
+            setChecksOpen(v => !v)
+          }
+        }}
+        aria-expanded={checksOpen}
+      >
+        <div className="hero-checks-accordion-left">
           <div className="details-heading">Checks breakdown</div>
           <div className="details-subheading">
-            Retrieval, structure, and citation cues that shape how reusable the content feels.
+            {passedGeo}/{checks.length} content · {passedGeu}/{geuChecks.length} GEU
           </div>
         </div>
-        <div className="checks-tabs">
-          <button
-            type="button"
-            className={`tab-btn${activeTab === 'geo' ? ' active geo' : ''}`}
-            onClick={() => setActiveTab('geo')}
-          >
-            Content {passedGeo}/{checks.length}
-          </button>
-          <button
-            type="button"
-            className={`tab-btn${activeTab === 'geu' ? ' active geu' : ''}`}
-            onClick={() => setActiveTab('geu')}
-          >
-            GEU {passedGeu}/{geuChecks.length}
-          </button>
+        <div className="hero-checks-accordion-right">
+          <div className="checks-tabs" onClick={e => e.stopPropagation()}>
+            <button
+              type="button"
+              className={`tab-btn${activeTab === 'geo' ? ' active geo' : ''}`}
+              onClick={() => { setActiveTab('geo'); setChecksOpen(true) }}
+            >
+              Content {passedGeo}/{checks.length}
+            </button>
+            <button
+              type="button"
+              className={`tab-btn${activeTab === 'geu' ? ' active geu' : ''}`}
+              onClick={() => { setActiveTab('geu'); setChecksOpen(true) }}
+            >
+              GEU {passedGeu}/{geuChecks.length}
+            </button>
+          </div>
+          <span className={`checks-chevron${checksOpen ? ' open' : ''}`}>▾</span>
         </div>
       </div>
 
-      <div className="checks-list">
-        {activeChecks.map((check, index) => (
-          <div
-            key={check.id}
-            className={`check-row${check.passed ? ' passed-row' : ''}`}
-            style={{ animationDelay: `${index * 30}ms` }}
-          >
-            <div className="check-left">
-              <div className={`check-icon${check.passed ? ' passed' : ''}`}>
-                {check.passed ? 'OK' : ''}
+      <div className={`checks-accordion-body${checksOpen ? ' open' : ''}`}>
+        <div className="checks-accordion-inner">
+        <div className="checks-list">
+          {activeChecks.map((check, index) => (
+            <div
+              key={check.id}
+              className={`check-row${check.passed ? ' passed-row' : ''}`}
+              style={{ animationDelay: `${index * 30}ms` }}
+            >
+              <div className="check-left">
+                <div className={`check-icon${check.passed ? ' passed' : ''}`}>
+                  {check.passed ? 'OK' : ''}
+                </div>
+                <span className={`check-name${check.passed ? ' passed' : ' failed'}`}>
+                  {check.label}
+                </span>
               </div>
-              <span className={`check-name${check.passed ? ' passed' : ' failed'}`}>
-                {check.label}
-              </span>
+              <div className="check-right">
+                {check.lift && <span className="check-lift">{check.lift}</span>}
+                <span className={`check-weight${check.passed ? ' passed' : ' failed'}`}>
+                  {check.weight} pts
+                </span>
+              </div>
             </div>
-            <div className="check-right">
-              {check.lift && <span className="check-lift">{check.lift}</span>}
-              <span className={`check-weight${check.passed ? ' passed' : ' failed'}`}>
-                {check.weight} pts
-              </span>
-            </div>
-          </div>
-        ))}
+          ))}
+        </div>
+        </div>
       </div>
     </div>
   )

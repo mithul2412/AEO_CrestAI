@@ -29,7 +29,7 @@ async function callGroqChat(messages, systemContent) {
       model: 'llama-3.3-70b-versatile',
       messages: allMessages,
       temperature: 0.5,
-      max_tokens: 650,
+      max_tokens: 1200,
     }),
     signal: AbortSignal.timeout(LLM_TIMEOUT_MS),
   })
@@ -61,7 +61,7 @@ async function callOpenRouterChat(messages, systemContent) {
     body: JSON.stringify({
       model: 'nvidia/nemotron-3-super-120b-a12b:free',
       messages: allMessages,
-      max_tokens: 650,
+      max_tokens: 1200,
       temperature: 0.5,
     }),
     signal: AbortSignal.timeout(LLM_TIMEOUT_MS),

@@ -1,5 +1,8 @@
 import { Router } from 'express'
 import fetch from 'node-fetch'
+import { buildAccessFallback, crawlPage } from '../services/crawlService.js'
+import { extractPageIntelligence } from '../services/extractService.js'
+import { fetchMarkdownWithJina } from '../services/jinaReaderService.js'
 
 const router = Router()
 const FETCH_TIMEOUT_MS = 60_000
@@ -110,48 +113,35 @@ async function buildSourceSignals(normalizedUrl, requestId) {
   }
 }
 
-async function fetchMarkdownFromJina(normalizedUrl, onChunk, signal, requestId) {
-  const jinaUrl = `https://r.jina.ai/${normalizedUrl}`
-  logFetch(requestId, `invoking Jina ${jinaUrl}`)
+async function inspectPageIntelligence(normalizedUrl, markdown, crawlPromise, requestId) {
+  try {
+    const crawlResult = await crawlPromise
+    const extraction = extractPageIntelligence({
+      html: crawlResult.html,
+      markdown,
+      url: crawlResult.access.finalUrl || normalizedUrl,
+    })
 
-  const jinaRes = await fetch(jinaUrl, {
-    headers: {
-      Accept: 'text/markdown',
-      'X-Return-Format': 'markdown',
-      ...(process.env.JINA_API_KEY && { Authorization: `Bearer ${process.env.JINA_API_KEY}` }),
-    },
-    signal,
-  })
-
-  logFetch(requestId, `Jina response status ${jinaRes.status}`)
-
-  if (!jinaRes.ok) {
-    const errorText = await jinaRes.text().catch(() => '')
-    const compactError = errorText.replace(/\s+/g, ' ').trim()
-    throw new Error(compactError ? `Jina returned ${jinaRes.status}: ${compactError}` : `Jina returned ${jinaRes.status}`)
-  }
-
-  let markdown = ''
-  let chunkCount = 0
-
-  for await (const chunk of jinaRes.body) {
-    const textChunk = chunk.toString('utf8')
-    markdown += textChunk
-    chunkCount += 1
-
-    if (chunkCount <= 3 || chunkCount % 10 === 0) {
-      logFetch(requestId, `stream chunk ${chunkCount} (${textChunk.length} chars, total ${markdown.length})`)
+    return {
+      access: {
+        ...crawlResult.access,
+        canonical: extraction.canonical || crawlResult.access.canonical,
+        indexable: crawlResult.access.indexable !== false && !extraction.robotsMeta?.noindex,
+        warnings: [
+          ...(crawlResult.access.warnings || []),
+          ...(extraction.robotsMeta?.noindex ? ['Page-level robots meta noindex blocks indexability.'] : []),
+          ...(extraction.robotsMeta?.nosnippet ? ['Page-level robots meta nosnippet may limit answer reuse.'] : []),
+        ],
+      },
+      extraction,
     }
-
-    if (onChunk) onChunk(textChunk)
+  } catch (err) {
+    logFetch(requestId, `intelligence inspection failed: ${err.message || 'unknown error'}`)
+    return {
+      access: buildAccessFallback(normalizedUrl, err.message || 'Access intelligence unavailable.'),
+      extraction: extractPageIntelligence({ html: '', markdown, url: normalizedUrl }),
+    }
   }
-
-  if (!markdown.trim()) {
-    throw new Error('Empty response from Jina AI')
-  }
-
-  logFetch(requestId, `Jina fetch complete with ${chunkCount} chunks and ${markdown.length} chars`)
-  return { markdown, charCount: markdown.length }
 }
 
 router.get('/', async (req, res) => {
@@ -193,16 +183,25 @@ router.get('/', async (req, res) => {
       logFetch(requestId, 'SSE stream opened')
 
       const sourceSignalsPromise = buildSourceSignals(normalizedUrl, requestId)
-      const { markdown, charCount } = await fetchMarkdownFromJina(
-        normalizedUrl,
-        chunk => sendSse(res, 'chunk', { chunk }),
-        controller.signal,
-        requestId
-      )
-      const sourceSignals = await sourceSignalsPromise
+      const crawlPromise = crawlPage(normalizedUrl)
+      logFetch(requestId, `invoking Jina https://r.jina.ai/${normalizedUrl}`)
+      const { markdown, charCount, chunkCount } = await fetchMarkdownWithJina(normalizedUrl, {
+        signal: controller.signal,
+        onChunk: (chunk, meta) => {
+          if (meta.chunkCount <= 3 || meta.chunkCount % 10 === 0) {
+            logFetch(requestId, `stream chunk ${meta.chunkCount} (${chunk.length} chars, total ${meta.totalChars})`)
+          }
+          sendSse(res, 'chunk', { chunk })
+        },
+      })
+      logFetch(requestId, `Jina fetch complete with ${chunkCount} chunks and ${charCount} chars`)
+      const [sourceSignals, intelligence] = await Promise.all([
+        sourceSignalsPromise,
+        inspectPageIntelligence(normalizedUrl, markdown, crawlPromise, requestId),
+      ])
 
       logFetch(requestId, `source signals ready llms.txt=${sourceSignals.llmsTxt.present} llms-full.txt=${sourceSignals.llmsFullTxt.present}`)
-      sendSse(res, 'complete', { markdown, charCount, sourceSignals, normalizedUrl })
+      sendSse(res, 'complete', { markdown, charCount, sourceSignals, normalizedUrl, intelligence })
       logFetch(requestId, 'SSE stream completed successfully')
     } catch (err) {
       const message = formatFetchError(err)
@@ -218,13 +217,17 @@ router.get('/', async (req, res) => {
   }
 
   try {
+    const crawlPromise = crawlPage(normalizedUrl)
     const [sourceSignals, { markdown, charCount }] = await Promise.all([
       buildSourceSignals(normalizedUrl, requestId),
-      fetchMarkdownFromJina(normalizedUrl, null, AbortSignal.timeout(FETCH_TIMEOUT_MS), requestId),
+      fetchMarkdownWithJina(normalizedUrl, {
+        signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+      }),
     ])
+    const intelligence = await inspectPageIntelligence(normalizedUrl, markdown, crawlPromise, requestId)
 
     logFetch(requestId, `JSON fetch completed charCount=${charCount}`)
-    res.json({ markdown, charCount, sourceSignals, normalizedUrl })
+    res.json({ markdown, charCount, sourceSignals, normalizedUrl, intelligence })
   } catch (err) {
     const message = formatFetchError(err)
     logFetch(requestId, `JSON fetch failed: ${message}`)

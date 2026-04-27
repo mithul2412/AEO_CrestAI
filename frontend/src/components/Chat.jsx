@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { readApiError } from '../utils/api.js'
+import WanderingEyes from './WanderingEyes.jsx'
 
 const MODELS = [
   { id: 'Llama 3.3', label: 'Llama', className: 'llama' },
@@ -135,9 +136,8 @@ function TypingBubble({ label, modelClass }) {
     <div className="msg-model-wrap typing-wrap">
       <span className={`msg-model-label ${modelClass}`}>{label}</span>
       <div className="typing-indicator">
-        <div className="typing-dot" />
-        <div className="typing-dot" />
-        <div className="typing-dot" />
+        <WanderingEyes className="wandering-eyes-chat" title={`${label} is thinking`} />
+        <span>Thinking through the page...</span>
       </div>
     </div>
   )
@@ -384,7 +384,7 @@ export default function Chat({ markdown, stage = 'post-fetch', query = '', draft
           onClick={() => sendMessage()}
           disabled={sending || !input.trim()}
         >
-          {sending ? 'Sending...' : 'Send'}
+          {sending ? <><WanderingEyes className="wandering-eyes-button" title="Sending chat message" /> Sending...</> : 'Send'}
         </button>
       </div>
     </div>

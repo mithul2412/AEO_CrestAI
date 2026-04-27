@@ -4,6 +4,10 @@ import { computeGeoScore } from '../utils/geoScorer.js'
 import { computeGeuScore } from '../utils/geuScorer.js'
 import { truncateMarkdown } from '../utils/truncate.js'
 import { ANALYSIS_PROMPT, LLM_CONTENT_SCORE_PROMPT } from '../models.js'
+import { applyCompetitorGapScore, buildBaselineIntelligence, buildQueryIntelligence } from '../services/intelligenceScorer.js'
+import { generateHighestImpactFix } from '../services/fixGeneratorService.js'
+import { buildCompetitorCorpus } from '../services/competitorCorpusService.js'
+import { compareUserVsCompetitors } from '../services/competitorGapService.js'
 
 const router = Router()
 const OPENROUTER_CONTEXT_TOKENS = 3000
@@ -177,6 +181,8 @@ router.post('/', async (req, res) => {
       query,
       sourceSignals = {},
       baselineLlmContentScore = null,
+      pageIntelligence = {},
+      sourceUrl = '',
     } = req.body || {}
 
     if (!markdown || typeof markdown !== 'string') {
@@ -194,6 +200,7 @@ router.post('/', async (req, res) => {
       } = await runLlmContentScore(markdown)
 
       const overallScore = buildOverallScore({ contentScore, geuScore, llmContentScore })
+      const intelligence = buildBaselineIntelligence({ markdown, pageIntelligence })
 
       return res.json({
         contentScore,
@@ -208,6 +215,7 @@ router.post('/', async (req, res) => {
         geuChecks,
         verdicts: [],
         modelStatus: [],
+        intelligence,
       })
     }
 
@@ -241,6 +249,69 @@ router.post('/', async (req, res) => {
       queryScore,
       llmContentScore: normalizedBaselineLlm,
     })
+    let intelligenceBase = buildQueryIntelligence({
+      markdown,
+      query: query.trim(),
+      pageIntelligence,
+    })
+    let competitorIntelligence = {
+      status: 'disabled',
+      reason: sourceUrl ? 'TAVILY_API_KEY is missing' : 'sourceUrl is required for competitor discovery',
+      discovery: null,
+      competitors: [],
+      gap: null,
+      failures: [],
+    }
+
+    if (sourceUrl) {
+      try {
+        const corpus = await buildCompetitorCorpus({
+          query: query.trim(),
+          sourceUrl,
+          maxCompetitors: 3,
+        })
+        const gap = compareUserVsCompetitors({
+          query: query.trim(),
+          userChunks: intelligenceBase.chunks,
+          competitorPages: corpus.competitors,
+        })
+
+        competitorIntelligence = {
+          status: corpus.discovery?.status === 'ok' ? gap.status : corpus.discovery?.status || 'disabled',
+          discovery: corpus.discovery,
+          competitors: corpus.competitors.map(competitor => ({
+            sourceId: competitor.sourceId,
+            title: competitor.title,
+            url: competitor.url,
+            snippet: competitor.snippet,
+            tavilyScore: competitor.tavilyScore,
+            charCount: competitor.charCount,
+            chunkCount: competitor.chunkCount,
+          })),
+          gap,
+          failures: corpus.failures || [],
+        }
+
+        if (gap.status === 'ok' && typeof gap.competitorGapScore === 'number') {
+          intelligenceBase = applyCompetitorGapScore(intelligenceBase, gap.competitorGapScore)
+        }
+      } catch (err) {
+        competitorIntelligence = {
+          status: 'error',
+          error: err.message || 'Competitor discovery failed',
+          discovery: null,
+          competitors: [],
+          gap: null,
+          failures: [],
+        }
+      }
+    }
+
+    const highestImpactFix = generateHighestImpactFix({
+      query: query.trim(),
+      intelligence: intelligenceBase,
+      pageIntelligence,
+    })
 
     res.json({
       contentScore,
@@ -255,6 +326,11 @@ router.post('/', async (req, res) => {
       geuChecks,
       verdicts,
       modelStatus,
+      intelligence: {
+        ...intelligenceBase,
+        competitorIntelligence,
+        highestImpactFix,
+      },
     })
   } catch (err) {
     const message = err?.message || 'Analysis failed'

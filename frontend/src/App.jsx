@@ -3,14 +3,17 @@ import UrlInput from './components/UrlInput.jsx'
 import ScoreDisplay from './components/ScoreDisplay.jsx'
 import Verdicts from './components/Verdicts.jsx'
 import Chat from './components/Chat.jsx'
+import IntelligencePanel from './components/IntelligencePanel.jsx'
+import WanderingEyes from './components/WanderingEyes.jsx'
+import CrestLogo from './components/CrestLogo.jsx'
 import { readApiError } from './utils/api.js'
 
 const THEME_KEY = 'aeo-scorer-theme'
 const LLMS_TXT_POINTS = 10
 
 function getInitialTheme() {
-  if (typeof window === 'undefined') return 'dark'
-  return window.localStorage.getItem(THEME_KEY) || 'dark'
+  if (typeof window === 'undefined') return 'light'
+  return window.localStorage.getItem(THEME_KEY) || 'light'
 }
 
 function computeOverallScore(results) {
@@ -48,111 +51,44 @@ function mergeResultsWithBaseline(nextResults, baselineResults) {
   }
 }
 
-function JourneyBar({ fetchStatus, queryStatus, resultsStatus }) {
+function StatusBar({ fetchStatus, baselineStatus, resultsStatus, overallScore, gapScore, barRef }) {
   const steps = [
-    {
-      label: 'Fetch',
-      status: fetchStatus,
-      detail: fetchStatus === 'done'
-        ? 'Ready'
-        : fetchStatus === 'active'
-          ? 'Live'
-          : 'Pending',
-    },
-    {
-      label: 'Baseline',
-      status: queryStatus,
-      detail: queryStatus === 'done'
-        ? 'Ready'
-        : queryStatus === 'active'
-          ? 'Running'
-          : 'Locked',
-    },
-    {
-      label: 'Verdicts',
-      status: resultsStatus,
-      detail: resultsStatus === 'done'
-        ? 'Ready'
-        : resultsStatus === 'active'
-          ? 'Running'
-          : 'Locked',
-    },
+    { label: 'Fetch', status: fetchStatus, n: '1' },
+    { label: 'Baseline', status: baselineStatus, n: '2' },
+    { label: 'Verdicts', status: resultsStatus, n: '3' },
   ]
 
   return (
-    <div className="journey-bar" aria-label="Analysis progress">
-      {steps.map((step, index) => (
-        <div className={`journey-item ${step.status}`} key={step.label}>
-          <div className="journey-step-track" aria-hidden="true">
-            <span className="journey-state" />
-            {index < steps.length - 1 && <span className="journey-line" />}
+    <div ref={barRef} className="status-bar" aria-label="Analysis progress">
+      <div className="status-track">
+        {steps.map((step, index) => (
+          <div key={step.label} className="status-track-segment">
+            <div className={`status-node status-node--${step.status}`}>
+              <div className="status-node-circle">
+                {step.status === 'done' ? '✓' : step.n}
+              </div>
+              <span className="status-node-label">{step.label}</span>
+            </div>
+            {index < steps.length - 1 && (
+              <div className={`status-connector${step.status === 'done' ? ' filled' : ''}`} />
+            )}
           </div>
-          <div className="journey-step-copy">
-            <span className="journey-label">{step.label}</span>
-            <span className="journey-caption">{step.detail}</span>
-          </div>
+        ))}
+      </div>
+      {(overallScore != null || gapScore != null) && (
+        <div className="status-metrics">
+          {overallScore != null && (
+            <span className="status-metric">Score <strong>{overallScore}</strong></span>
+          )}
+          {gapScore != null && (
+            <span className="status-metric">Gap <strong>{gapScore >= 0 ? '+' : ''}{gapScore}</strong></span>
+          )}
         </div>
-      ))}
+      )}
     </div>
   )
 }
 
-function getHeroContent({ hasFetched, hasQueryResults, contentAnalyzing, queryAnalyzing }) {
-  if (!hasFetched && !contentAnalyzing) {
-    return {
-      eyebrow: 'Pre-publish answer engine review',
-      title: 'Score a live page before you ship it.',
-      description: 'Fetch the page, read the baseline, then test one exact query.',
-    }
-  }
-
-  if (contentAnalyzing) {
-    return {
-      eyebrow: 'Baseline in progress',
-      title: 'Building the baseline.',
-      description: 'Fetching the page and reading structure signals.',
-    }
-  }
-
-  if (queryAnalyzing) {
-    return {
-      eyebrow: 'Query comparison in progress',
-      title: 'Scoring the target query.',
-      description: 'Comparing direct-answer quality against the baseline.',
-    }
-  }
-
-  if (hasQueryResults) {
-    return {
-      eyebrow: 'Decision-ready readout',
-      title: 'The page is scored and ready for fixes.',
-      description: 'Use the gap, verdicts, and chat to decide what to rewrite first.',
-    }
-  }
-
-  return {
-    eyebrow: 'Baseline ready',
-    title: 'Baseline ready. Add the query.',
-    description: 'Run one exact question to see whether the answer lands fast enough.',
-  }
-}
-
-function getSignalTone(isPositive, isReady) {
-  if (!isReady) return 'idle'
-  return isPositive ? 'good' : 'muted'
-}
-
-function formatSnapshotUrl(rawUrl) {
-  if (!rawUrl) return '--'
-
-  try {
-    const parsed = new URL(rawUrl)
-    const pathname = parsed.pathname === '/' ? '' : parsed.pathname
-    return `${parsed.hostname}${pathname}`
-  } catch {
-    return rawUrl.replace(/^https?:\/\//, '')
-  }
-}
 
 function formatBrand(rawUrl) {
   if (!rawUrl) return 'this page'
@@ -258,8 +194,10 @@ function buildChatDraft(query, verdict) {
 export default function App() {
   const [url, setUrl] = useState('')
   const [markdown, setMarkdown] = useState('')
+  const [normalizedUrl, setNormalizedUrl] = useState('')
   const [charCount, setCharCount] = useState(0)
   const [sourceSignals, setSourceSignals] = useState({})
+  const [pageIntelligence, setPageIntelligence] = useState(null)
   const [query, setQuery] = useState('')
   const [baselineResults, setBaselineResults] = useState(null)
   const [results, setResults] = useState(null)
@@ -270,21 +208,53 @@ export default function App() {
   const [advancedOpen, setAdvancedOpen] = useState(false)
   const [drawer, setDrawer] = useState(null)
   const [chatDraft, setChatDraft] = useState({ text: '', token: 0 })
+  const [activeMode, setActiveMode] = useState('score')
   const queryInputRef = useRef(null)
+  const topbarRef = useRef(null)
+  const statusBarRef = useRef(null)
+  const lastScrollY = useRef(0)
+
+  useEffect(() => {
+    const handleScroll = () => {
+      const y = window.scrollY
+      const scrollingDown = y > lastScrollY.current
+      lastScrollY.current = y
+
+      if (topbarRef.current) {
+        const hidden = y > 60
+        topbarRef.current.style.opacity = hidden ? '0' : '1'
+        topbarRef.current.style.transform = hidden ? 'translateY(-100%)' : 'translateY(0)'
+        topbarRef.current.style.pointerEvents = hidden ? 'none' : ''
+      }
+
+      if (statusBarRef.current) {
+        const hide = scrollingDown && y > 80
+        statusBarRef.current.style.transform = hide ? 'translateY(-110%)' : 'translateY(0)'
+        statusBarRef.current.style.opacity = hide ? '0' : '1'
+        statusBarRef.current.style.pointerEvents = hide ? 'none' : ''
+      }
+    }
+    window.addEventListener('scroll', handleScroll, { passive: true })
+    return () => window.removeEventListener('scroll', handleScroll)
+  }, [])
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme
     window.localStorage.setItem(THEME_KEY, theme)
   }, [theme])
 
-  const handleBaselineAnalyze = useCallback(async (nextMarkdown, nextSourceSignals = {}) => {
+  const handleBaselineAnalyze = useCallback(async (nextMarkdown, nextSourceSignals = {}, nextPageIntelligence = null) => {
     setContentAnalyzing(true)
     setError('')
     try {
       const res = await fetch('/analyze', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ markdown: nextMarkdown, sourceSignals: nextSourceSignals })
+        body: JSON.stringify({
+          markdown: nextMarkdown,
+          sourceSignals: nextSourceSignals,
+          pageIntelligence: nextPageIntelligence || {},
+        })
       })
       if (!res.ok) {
         throw new Error(await readApiError(res, `Analyze error: ${res.status}`))
@@ -298,16 +268,19 @@ export default function App() {
     }
   }, [])
 
-  const handleFetchComplete = useCallback((nextMarkdown, nextCharCount, nextSourceSignals = {}) => {
+  const handleFetchComplete = useCallback((nextMarkdown, nextCharCount, nextSourceSignals = {}, nextPageIntelligence = null, nextNormalizedUrl = '') => {
     setMarkdown(nextMarkdown)
+    setNormalizedUrl(nextNormalizedUrl || nextSourceSignals?.sourceUrl || url)
     setCharCount(nextCharCount)
     setSourceSignals(nextSourceSignals)
+    setPageIntelligence(nextPageIntelligence)
     setQuery('')
     setBaselineResults(null)
     setResults(null)
     setDrawer(null)
-    void handleBaselineAnalyze(nextMarkdown, nextSourceSignals)
-  }, [handleBaselineAnalyze])
+    setActiveMode('score')
+    void handleBaselineAnalyze(nextMarkdown, nextSourceSignals, nextPageIntelligence)
+  }, [handleBaselineAnalyze, url])
 
   const handleAnalyze = useCallback(async () => {
     if (!markdown) return
@@ -322,8 +295,10 @@ export default function App() {
         body: JSON.stringify({
           markdown,
           query: query.trim() || undefined,
+          sourceUrl: normalizedUrl,
           sourceSignals,
           baselineLlmContentScore: baselineResults?.llmContentScore ?? null,
+          pageIntelligence: pageIntelligence || {},
         })
       })
 
@@ -333,12 +308,13 @@ export default function App() {
 
       const data = await res.json()
       setResults(mergeResultsWithBaseline(data, baselineResults))
+      setActiveMode('intelligence')
     } catch (e) {
       setError(e.message)
     } finally {
       setQueryAnalyzing(false)
     }
-  }, [baselineResults, markdown, query, sourceSignals])
+  }, [baselineResults, markdown, normalizedUrl, pageIntelligence, query, sourceSignals])
 
   const hasBaseline = !!baselineResults
   const hasFetched = !!markdown
@@ -348,6 +324,10 @@ export default function App() {
   const showBaseline = hasFetched || contentAnalyzing
   const showQueryInput = hasFetched
   const showQueryResults = hasQueryResults
+  const isFocusGate = !hasFetched && !contentAnalyzing
+  const isBaselineGate = hasFetched && !hasQueryResults
+  const isDiagnosticGate = hasQueryResults
+  const gateClass = isFocusGate ? 'app--focus-gate' : isDiagnosticGate ? 'app--diagnostic-gate' : 'app--baseline-gate'
 
   const fetchStatus = hasFetched
     ? 'done'
@@ -373,42 +353,6 @@ export default function App() {
       ? 'post-query'
       : 'post-fetch'
 
-  const heroContent = getHeroContent({ hasFetched, hasQueryResults, contentAnalyzing, queryAnalyzing })
-
-  const heroStats = [
-    {
-      label: hasFetched ? 'Captured' : 'Fetch mode',
-      value: hasFetched ? `${Math.max(1, Math.round(charCount / 1000))}k` : 'SSE',
-      detail: hasFetched ? `${charCount.toLocaleString()} chars normalized.` : 'Live markdown into the UI.',
-    },
-    {
-      label: hasBaseline ? 'Baseline' : 'Scoring layers',
-      value: hasBaseline ? `${activeResults?.overallScore ?? '--'}` : '4',
-      detail: hasBaseline ? 'Combined page score.' : 'Content, GEU, LLM, query.',
-    },
-    {
-      label: hasQueryResults ? 'Current gap' : 'Model coverage',
-      value: hasQueryResults && typeof results?.gapScore === 'number'
-        ? `${results.gapScore >= 0 ? '+' : ''}${results.gapScore}`
-        : '2',
-      detail: hasQueryResults ? 'Content minus query.' : 'Llama + Nemotron.',
-    },
-  ]
-
-  const sourceSignalCards = [
-    {
-      label: 'Page state',
-      value: hasQueryResults ? 'Scored' : hasBaseline ? 'Baseline ready' : hasFetched ? 'Fetched' : 'Idle',
-      detail: !hasFetched
-        ? 'Waiting for URL.'
-        : hasQueryResults
-          ? 'Ready for fixes.'
-          : hasBaseline
-            ? 'Ready for query.'
-            : 'Analyzing page.',
-      tone: hasQueryResults || hasBaseline ? 'good' : hasFetched ? 'muted' : 'idle',
-    },
-  ]
   const querySuggestions = buildQuerySuggestions(url)
   const { opportunities, points: opportunityPoints } = buildAdvancedOptimizations({
     checks: activeResults?.checks || [],
@@ -435,34 +379,8 @@ export default function App() {
     navigator.clipboard?.writeText(drawer.drawerContent)
   }, [drawer])
 
-  const snapshotItems = [
-    {
-      label: 'URL',
-      value: formatSnapshotUrl(url),
-      note: url ? 'Current page' : 'No page yet',
-      emphasis: 'url',
-    },
-    {
-      label: 'Overall',
-      value: activeResults?.overallScore ?? '--',
-      note: activeResults ? 'Blended score' : 'Fetch a page first',
-    },
-    {
-      label: 'Query',
-      value: results?.queryScore ?? '--',
-      note: query.trim() ? query.trim() : 'Add a query',
-    },
-    {
-      label: 'Gap',
-      value: typeof results?.gapScore === 'number'
-        ? `${results.gapScore >= 0 ? '+' : ''}${results.gapScore}`
-        : '--',
-      note: results?.gapScore != null ? 'Content minus query' : 'Available after query',
-    },
-  ]
-
   return (
-    <div className="app">
+    <div className={`app ${gateClass}`}>
       <div className="sr-only" role="status" aria-live="polite">
         {contentAnalyzing
           ? 'Analyzing baseline content signals...'
@@ -471,17 +389,23 @@ export default function App() {
             : ''}
       </div>
 
-      <header className="topbar">
+      <header ref={topbarRef} className="topbar">
         <div className="topbar-brand">
-          <div className="topbar-mark" aria-hidden="true">
-            <div className="topbar-mark-core" />
-          </div>
-          <div className="topbar-brand-copy">
-            <span className="topbar-name">AEO Scorer</span>
-            <span className="topbar-tagline">Pre-publish answer engine review</span>
-          </div>
+          <CrestLogo size="small" />
         </div>
         <div className="topbar-actions">
+          <div className="mode-toggle" role="group" aria-label="Workspace mode">
+            <button
+              type="button"
+              className={`mode-btn${activeMode === 'score' ? ' active' : ''}`}
+              onClick={() => setActiveMode('score')}
+            >Score</button>
+            <button
+              type="button"
+              className={`mode-btn${activeMode === 'intelligence' ? ' active' : ''}`}
+              onClick={() => setActiveMode('intelligence')}
+            >Intelligence</button>
+          </div>
           <div className="theme-toggle" role="group" aria-label="Color theme">
             <button
               type="button"
@@ -497,180 +421,48 @@ export default function App() {
         </div>
       </header>
 
-      <main className="main">
-        <section className="hero-shell">
-          <div className="panel panel-hero">
-            <div className="hero-layout">
-              <div className="hero-main">
-                <div className="hero-eyebrow">{heroContent.eyebrow}</div>
-                <h1>{heroContent.title}</h1>
-                <p className="hero-copy-text">{heroContent.description}</p>
+      {!isFocusGate && (
+        <StatusBar
+          fetchStatus={fetchStatus}
+          baselineStatus={baselineStatus}
+          resultsStatus={resultsStatus}
+          overallScore={activeResults?.overallScore ?? null}
+          gapScore={typeof results?.gapScore === 'number' ? results.gapScore : null}
+          barRef={statusBarRef}
+        />
+      )}
 
-                <div className="hero-stat-grid">
-                  {heroStats.map(stat => (
-                    <div key={stat.label} className="hero-stat-card">
-                      <span className="hero-stat-label">{stat.label}</span>
-                      <strong className="hero-stat-value">{stat.value}</strong>
-                      <span className="hero-stat-detail">{stat.detail}</span>
-                    </div>
-                  ))}
-                </div>
+      <main className={`main ${isFocusGate ? 'main--focus' : ''}`}>
+        <section className={`analysis-stack ${isFocusGate ? 'analysis-stack--focus' : ''}`}>
+          <div className={`section panel section-fetch ${isFocusGate ? 'section-fetch--focus' : 'section-fetch--locked'}`} style={{ animationDelay: '0.06s' }}>
+            <div className="section-fetch-layout">
+              <div className="section-fetch-heading">
+                {isFocusGate && <CrestLogo size="hero" />}
+                <div className="section-kicker">Gate 01 / Fetch the live page</div>
+                <h1 className="section-title">
+                  {isFocusGate ? 'Test AI Citation Readiness' : 'Source page locked for diagnosis'}
+                </h1>
+                <p className="gate-copy">
+                  {isFocusGate
+                    ? 'Paste a live page URL. Crest.ai will read the AI-visible markdown, check crawler access, and prepare the page for query diagnosis.'
+                    : normalizedUrl || url}
+                </p>
               </div>
-
-              <div className="hero-side">
-                <div className="hero-tracker-card">
-                  <div className="rail-card-header">
-                    <div>
-                      <div className="rail-card-title">Progress</div>
-                      <div className="rail-card-subtitle">Small tracker for the current flow.</div>
-                    </div>
-                    <span className={`summary-pill ${hasFetched ? 'ok' : 'warn'}`}>
-                      {hasQueryResults ? 'Verdicts ready' : hasBaseline ? 'Baseline ready' : hasFetched ? 'Fetched' : 'Waiting'}
-                    </span>
-                  </div>
-
-                  <JourneyBar
-                    fetchStatus={fetchStatus}
-                    queryStatus={baselineStatus}
-                    resultsStatus={resultsStatus}
-                  />
-                </div>
+              <div className="section-fetch-input">
+                <UrlInput
+                  url={url}
+                  onUrlChange={setUrl}
+                  onFetchComplete={handleFetchComplete}
+                />
               </div>
             </div>
           </div>
-        </section>
 
-        <section className="overview-grid">
-          <div className="panel overview-card overview-card-snapshot" style={{ animationDelay: '0.02s' }}>
-            <div className="rail-card-header">
-              <div>
-                <div className="rail-card-title">Analysis snapshot</div>
-              </div>
-            </div>
-
-            <div className="snapshot-grid">
-              {snapshotItems.map(item => (
-                <div
-                  key={item.label}
-                  className={`snapshot-item${item.emphasis ? ` snapshot-item--${item.emphasis}` : ''}`}
-                >
-                  <span className="snapshot-label">{item.label}</span>
-                  <strong className={`snapshot-value${item.emphasis ? ` snapshot-value--${item.emphasis}` : ''}`}>
-                    {item.value}
-                  </strong>
-                  <span className="snapshot-note">{item.note}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div className="panel overview-card overview-card-signals" style={{ animationDelay: '0.06s' }}>
-            <div className="rail-card-header">
-              <div>
-                <div className="rail-card-title">Advanced Optimizations</div>
-              </div>
-              <button
-                type="button"
-                className="chip"
-                aria-expanded={advancedOpen}
-                onClick={() => setAdvancedOpen(value => !value)}
-              >
-                {advancedOpen ? 'Hide optimizations' : 'Show optimizations'}
-              </button>
-            </div>
-            <div className="optimization-summary-row">
-              <span className={`summary-pill ${opportunities.length > 0 ? 'warn' : 'ok'}`}>{opportunitySummary}</span>
-            </div>
-            {advancedOpen && (
-              <div className="optimization-accordion-body">
-                <div className="signal-stack">
-                  {opportunities.length > 0 ? opportunities.map(opportunity => (
-                    <div key={opportunity.id} className="signal-card opportunity">
-                      <div className="signal-card-top">
-                        <span className="signal-card-label">{opportunity.label}</span>
-                        <span className="signal-card-value">
-                          {opportunity.points > 0 ? `+${opportunity.points} pts` : 'Info'}
-                        </span>
-                      </div>
-                      <div className="signal-card-opportunity">{opportunity.headline}</div>
-                      <div className="signal-card-detail">{opportunity.detail}</div>
-                      <button
-                        type="button"
-                        className="chip"
-                        onClick={() => setDrawer(opportunity)}
-                      >
-                        {opportunity.actionLabel}
-                      </button>
-                    </div>
-                  )) : (
-                    <div className="signal-card good">
-                      <div className="signal-card-top">
-                        <span className="signal-card-label">State</span>
-                        <span className="signal-card-value">Clear</span>
-                      </div>
-                      <div className="signal-card-detail">
-                        No high-signal technical opportunities are open right now.
-                      </div>
-                    </div>
-                  )}
-
-                  {sourceSignalCards.map(signal => (
-                    <div key={signal.label} className={`signal-card ${signal.tone}`}>
-                      <div className="signal-card-top">
-                        <span className="signal-card-label">{signal.label}</span>
-                        <span className="signal-card-value">{signal.value}</span>
-                      </div>
-                      <div className="signal-card-detail">{signal.detail}</div>
-                    </div>
-                  ))}
-                </div>
-
-                {drawer && (
-                  <div className="template-drawer" aria-labelledby={`template-drawer-${drawer.id}`}>
-                    <div className="template-drawer-head">
-                      <div>
-                        <div id={`template-drawer-${drawer.id}`} className="details-heading">{drawer.drawerTitle}</div>
-                        <div className="details-subheading">{drawer.drawerIntro}</div>
-                      </div>
-                      <button type="button" className="chip" onClick={() => setDrawer(null)}>
-                        Close
-                      </button>
-                    </div>
-                    <pre className="template-drawer-code">{drawer.drawerContent}</pre>
-                    <div className="template-drawer-actions">
-                      {drawer.drawerMode === 'template' && (
-                        <button type="button" className="chip chip-primary" onClick={handleCopyDrawer}>
-                          Copy template
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-        </section>
-
-        <section className="analysis-stack">
-          <div className="section panel section-fetch" style={{ animationDelay: '0.06s' }}>
-            <div className="section-head">
-              <div>
-                <div className="section-kicker">Phase 01 / Fetch the live page</div>
-                <div className="section-title">Start with the source your users will actually land on</div>
-              </div>
-            </div>
-            <UrlInput
-              url={url}
-              onUrlChange={setUrl}
-              onFetchComplete={handleFetchComplete}
-            />
-          </div>
-
-          {showBaseline && (
+          {activeMode === 'score' && showBaseline && (
             <div className="section panel section-baseline" style={{ animationDelay: '0.12s' }}>
               <div className="section-head">
                 <div>
-                  <div className="section-kicker">Phase 02 / Baseline score</div>
+                  <div className="section-kicker">Gate 02 / Baseline waiting room</div>
                   <div className="section-title">Read the page before you optimize the answer</div>
                 </div>
               </div>
@@ -678,58 +470,136 @@ export default function App() {
                 results={activeResults}
                 loading={contentAnalyzing}
                 error={!activeResults ? error : ''}
-                onRetry={hasFetched ? () => void handleBaselineAnalyze(markdown, sourceSignals) : null}
+                onRetry={hasFetched ? () => void handleBaselineAnalyze(markdown, sourceSignals, pageIntelligence) : null}
               />
             </div>
           )}
 
-          {showQueryInput && (
-            <div className="section panel section-query-input" style={{ animationDelay: '0.16s' }}>
+          {activeMode === 'score' && hasBaseline && (
+            <div className="section panel section-optimizations" style={{ animationDelay: '0.14s' }}>
               <div className="section-head">
                 <div>
-                  <div className="section-kicker">Phase 03 / Target query</div>
-                  <div className="section-title">Stress-test the exact question the page needs to answer</div>
+                  <div className="section-kicker">Technical wins</div>
+                  <div className="section-title">Quick fixes that don't need a rewrite</div>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  <span className={`summary-pill ${opportunities.length > 0 ? 'warn' : 'ok'}`}>{opportunitySummary}</span>
+                  <button
+                    type="button"
+                    className="chip"
+                    aria-label={advancedOpen ? 'Hide optimizations' : 'Show optimizations'}
+                    aria-expanded={advancedOpen}
+                    onClick={() => setAdvancedOpen(v => !v)}
+                  >
+                    {advancedOpen ? 'Hide' : 'Show'}
+                  </button>
                 </div>
               </div>
 
-              <div className="query-helper">
-                Add the exact question to unlock Query Match, Gap, and verdicts.
-              </div>
+              {advancedOpen && (
+                <div className="optimization-accordion-body">
+                  <div className="signal-stack">
+                    {opportunities.length > 0 ? opportunities.map(opportunity => (
+                      <div key={opportunity.id} className="signal-card opportunity">
+                        <div className="signal-card-top">
+                          <span className="signal-card-label">{opportunity.label}</span>
+                          <span className="signal-card-value">
+                            {opportunity.points > 0 ? `+${opportunity.points} pts` : 'Info'}
+                          </span>
+                        </div>
+                        <div className="signal-card-opportunity">{opportunity.headline}</div>
+                        <div className="signal-card-detail">{opportunity.detail}</div>
+                        <button type="button" className="chip" onClick={() => setDrawer(opportunity)}>
+                          {opportunity.actionLabel}
+                        </button>
+                      </div>
+                    )) : (
+                      <div className="signal-card good">
+                        <div className="signal-card-top">
+                          <span className="signal-card-label">State</span>
+                          <span className="signal-card-value">Clear</span>
+                        </div>
+                        <div className="signal-card-detail">No high-signal technical opportunities are open right now.</div>
+                      </div>
+                    )}
+                  </div>
 
-              <div className={`query-input-shell${!query.trim() ? ' query-input-shell--primed' : ''}`}>
-                <input
-                  ref={queryInputRef}
-                  className="query-input query-input-prominent"
-                  placeholder="e.g. what is the best CRM for small business?"
-                  value={query}
-                  onChange={e => setQuery(e.target.value)}
-                  onKeyDown={e => e.key === 'Enter' && handleAnalyze()}
-                />
-              </div>
+                  {drawer && (
+                    <div className="template-drawer" aria-labelledby={`template-drawer-${drawer.id}`}>
+                      <div className="template-drawer-head">
+                        <div>
+                          <div id={`template-drawer-${drawer.id}`} className="details-heading">{drawer.drawerTitle}</div>
+                          <div className="details-subheading">{drawer.drawerIntro}</div>
+                        </div>
+                        <button type="button" className="chip" onClick={() => setDrawer(null)}>Close</button>
+                      </div>
+                      <pre className="template-drawer-code">{drawer.drawerContent}</pre>
+                      <div className="template-drawer-actions">
+                        {drawer.drawerMode === 'template' && (
+                          <button type="button" className="chip chip-primary" onClick={handleCopyDrawer}>
+                            Copy template
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
 
-              <div className="query-suggestion-row">
-                {querySuggestions.map(suggestion => (
-                  <button
-                    key={suggestion}
-                    type="button"
-                    className="chip query-suggestion-chip"
-                    onClick={() => setQuery(suggestion)}
-                  >
-                    {suggestion}
-                  </button>
-                ))}
-              </div>
+          {showQueryInput && (
+            <div className={`section panel section-query-input ${isBaselineGate ? 'section-query-input--unlock' : ''}`} style={{ animationDelay: '0.16s' }}>
+              <div className="section-fetch-layout">
+                <div className="section-fetch-heading">
+                  <div className="section-kicker">{isDiagnosticGate ? 'Gate 03 / Query in focus' : 'Gate 03 / Unlock Intelligence'}</div>
+                  <div className="section-title">
+                    {isDiagnosticGate ? 'The diagnostic engine is ready' : 'Run a target query to open the answer path'}
+                  </div>
+                  <div className="query-helper">
+                    {isDiagnosticGate
+                      ? 'Refine the question and re-score when you want to test another retrieval path.'
+                      : 'Baseline complete. To analyze retrieval, extraction, and competitor gaps, run a target query.'}
+                  </div>
+                </div>
 
-              <div className="query-actions">
-                <button
-                  className={`btn-send btn-rescore${queryAnalyzing ? ' loading' : ''}`}
-                  onClick={handleAnalyze}
-                  disabled={queryAnalyzing || !query.trim() || !hasBaseline}
-                >
-                  {queryAnalyzing
-                    ? <><span className="spinner" /> Analyzing...</>
-                    : 'Re-Score with Query'}
-                </button>
+                <div className="section-fetch-input">
+                  <div className={`query-input-shell${!query.trim() ? ' query-input-shell--primed' : ''}`}>
+                    <input
+                      ref={queryInputRef}
+                      className="query-input query-input-prominent"
+                      placeholder="e.g. what is the best CRM for small business?"
+                      value={query}
+                      onChange={e => setQuery(e.target.value)}
+                      onKeyDown={e => e.key === 'Enter' && handleAnalyze()}
+                    />
+                  </div>
+
+                  <div className="query-suggestion-row">
+                    {querySuggestions.map(suggestion => (
+                      <button
+                        key={suggestion}
+                        type="button"
+                        className="chip query-suggestion-chip"
+                        onClick={() => setQuery(suggestion)}
+                      >
+                        {suggestion}
+                      </button>
+                    ))}
+                  </div>
+
+                  <div className="query-actions">
+                    <button
+                      className={`btn-send btn-rescore${queryAnalyzing ? ' loading' : ''}`}
+                      onClick={handleAnalyze}
+                      disabled={queryAnalyzing || !query.trim() || !hasFetched}
+                    >
+                      {queryAnalyzing
+                        ? <><WanderingEyes className="wandering-eyes-button" title="Analyzing target query" /> Analyzing...</>
+                        : 'Re-Score with Query'}
+                    </button>
+                  </div>
+                </div>
               </div>
 
               {!query.trim() && hasBaseline && !hasQueryResults && (
@@ -759,14 +629,36 @@ export default function App() {
             </div>
           )}
 
-          {showQueryResults && (
+          {activeMode === 'intelligence' && hasFetched && !hasQueryResults && (
+            <div className="section panel intelligence-gate-hold" style={{ animationDelay: '0.18s' }}>
+              <div>
+                <div className="section-kicker">Intelligence locked</div>
+                <div className="section-title">Run a target query to open the diagnostic timeline</div>
+                <p className="gate-copy">Access and extraction have been collected. Retrieval, answer extraction, competitor gap, and the highest-impact fix unlock after query scoring.</p>
+              </div>
+              <button type="button" className="chip chip-primary" onClick={focusQueryInput}>
+                Add query
+              </button>
+            </div>
+          )}
+
+          {activeMode === 'intelligence' && (!hasFetched || hasQueryResults) && (
+            <IntelligencePanel
+              markdown={markdown}
+              pageIntelligence={pageIntelligence}
+              results={results || baselineResults}
+              query={query.trim()}
+              queryAnalyzing={queryAnalyzing}
+            />
+          )}
+
+          {activeMode === 'score' && showQueryResults && (
             <div className="section panel section-query-results" style={{ animationDelay: '0.2s' }}>
               <div className="section-head">
                 <div>
                   <div className="section-kicker">Phase 04 / Query results</div>
                   <div className="section-title">See how well the page answers the question, not just whether it looks complete</div>
                 </div>
-                <div className="section-note">See what to fix first.</div>
               </div>
 
               <Verdicts
@@ -786,13 +678,8 @@ export default function App() {
         <section id="ask-expert" className="ask-expert-section">
           <div className="ask-expert-inner">
             <div className="ask-expert-header">
-              <div>
-                <div className="ask-expert-kicker">Ask The Expert</div>
-                <h2 className="ask-expert-heading">Turn the analysis into a cleaner rewrite plan.</h2>
-                <p className="ask-expert-text">
-                  Use the page context and model toggle to draft the next rewrite.
-                </p>
-              </div>
+              <div className="ask-expert-kicker">Ask The Expert</div>
+              <h2 className="ask-expert-heading">Turn the analysis into a cleaner rewrite plan.</h2>
               <div className="ask-expert-summary">
                 <span className="summary-pill ok">Context loaded</span>
                 {query.trim() && <span className="summary-pill warn">Query in focus</span>}

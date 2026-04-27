@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { readApiError } from '../utils/api.js'
+import InfinityLoop from './InfinityLoop.jsx'
 
 function normalizeUrlInput(input) {
   const raw = input.trim()
@@ -50,7 +51,7 @@ export default function UrlInput({ url, onUrlChange, onFetchComplete }) {
         setCharCount(data.charCount)
         setFetchDone(true)
         setStreamState('complete')
-        onFetchComplete(data.markdown, data.charCount, data.sourceSignals || {})
+        onFetchComplete(data.markdown, data.charCount, data.sourceSignals || {}, data.intelligence || null, data.normalizedUrl || normalizedUrl)
       } catch (e) {
         setStreamState('error')
         setError(e.message)
@@ -97,7 +98,9 @@ export default function UrlInput({ url, onUrlChange, onFetchComplete }) {
       onFetchComplete(
         data.markdown || streamedMarkdown,
         data.charCount || (data.markdown || streamedMarkdown).length,
-        data.sourceSignals || {}
+        data.sourceSignals || {},
+        data.intelligence || null,
+        data.normalizedUrl || normalizedUrl
       )
     })
 
@@ -139,7 +142,7 @@ export default function UrlInput({ url, onUrlChange, onFetchComplete }) {
           disabled={fetching}
         >
           {fetching
-            ? <><span className="spinner" /> Streaming...</>
+            ? <><InfinityLoop className="infinity-loop-button" title="Accessing page content" /> Accessing...</>
             : 'Fetch Page'}
         </button>
       </div>
@@ -147,19 +150,19 @@ export default function UrlInput({ url, onUrlChange, onFetchComplete }) {
       <div className="fetch-status-strip">
         <span className={`fetch-status-pill ${streamState}`}>
           {streamState === 'idle' && 'Ready to fetch'}
-          {streamState === 'connecting' && 'Connecting to stream'}
-          {streamState === 'connected' && 'Stream open'}
-          {streamState === 'streaming' && 'Receiving content'}
-          {streamState === 'complete' && 'Fetch complete'}
-          {streamState === 'error' && 'Fetch failed'}
+          {streamState === 'connecting' && 'Reaching the page'}
+          {streamState === 'connected' && 'Page found'}
+          {streamState === 'streaming' && 'Pulling content'}
+          {streamState === 'complete' && 'Ready to score'}
+          {streamState === 'error' && 'Could not fetch'}
         </span>
-        <span className="fetch-inline-meta">
-          {fetching
-            ? 'Receiving markdown...'
-            : fetchDone
-              ? `${charCount.toLocaleString()} chars${chunkCount > 0 ? ` · ${chunkCount} chunks` : ''}`
-              : 'Live fetch via SSE'}
-        </span>
+        {(fetching || fetchDone) && (
+          <span className="fetch-inline-meta">
+            {fetching
+              ? <><InfinityLoop className="infinity-loop-inline" title="Reading page content" /> Reading page content...</>
+              : `${charCount.toLocaleString()} chars${chunkCount > 0 ? ` · ${chunkCount} chunks` : ''}`}
+          </span>
+        )}
       </div>
 
       {error && <div className="error-bar">{error}</div>}
