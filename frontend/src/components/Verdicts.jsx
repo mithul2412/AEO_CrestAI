@@ -31,11 +31,26 @@ function queryVerdict(queryScore, gap) {
 function consensusCopy(verdicts = [], modelStatus = []) {
   const responded = modelStatus.filter(model => model.status === 'ok').length || verdicts.length
   const total = modelStatus.length || verdicts.length
-  const agree = verdicts.length === 2
-    && Math.abs(verdicts[0].queryMatchScore - verdicts[1].queryMatchScore) <= 15
+  const scores = verdicts
+    .map(verdict => verdict.queryMatchScore)
+    .filter(score => typeof score === 'number')
+  const agree = scores.length >= 2
+    && Math.max(...scores) - Math.min(...scores) <= 15
 
   if (!total) return 'No model notes returned.'
   return `${responded}/${total} models checked · ${agree ? 'models broadly agree' : 'models need review'}`
+}
+
+function modelClass(model = '') {
+  if (/qwen/i.test(model)) return 'qwen'
+  if (/gpt/i.test(model)) return 'gptoss'
+  return 'nemotron'
+}
+
+function modelColor(className) {
+  if (className === 'qwen') return 'var(--model-a)'
+  if (className === 'gptoss') return 'var(--model-c)'
+  return 'var(--model-b)'
 }
 
 function copyToClipboard(value) {
@@ -128,18 +143,18 @@ export default function Verdicts({
 
             <div className="verdicts-cards">
               {verdicts.map((item, index) => {
-                const isLlama = item.model === 'Llama 3.3'
+                const className = modelClass(item.model)
                 return (
                   <div
                     key={item.model}
-                    className={`verdict-card ${isLlama ? 'llama-card' : 'nemotron-card'}`}
+                    className={`verdict-card ${className}-card`}
                     style={{ animationDelay: `${index * 120}ms` }}
                   >
                     <div className="verdict-header">
-                      <span className={`verdict-model ${isLlama ? 'llama' : 'nemotron'}`}>
+                      <span className={`verdict-model ${className}`}>
                         <span
                           className="verdict-model-dot"
-                          style={{ background: isLlama ? 'var(--model-a)' : 'var(--model-b)' }}
+                          style={{ background: modelColor(className) }}
                         />
                         {item.model}
                       </span>

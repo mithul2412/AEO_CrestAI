@@ -14,10 +14,14 @@ const results = {
   queryScore: null,
   gapScore: null,
   llmContentModels: [
-    { model: 'Llama 3.3', llmContentScore: 64, briefReason: 'Direct answer path is solid.' },
+    { model: 'Qwen 3.6 Plus', llmContentScore: 64, briefReason: 'Direct answer path is solid.' },
+    { model: 'Nemotron 120B', llmContentScore: 68, briefReason: 'The structure is easy to extract.' },
+    { model: 'GPT OSS 120B', llmContentScore: 66, briefReason: 'The evidence is moderate.' },
   ],
   llmContentStatus: [
-    { model: 'Llama 3.3', status: 'ok' },
+    { model: 'Qwen 3.6 Plus', status: 'ok' },
+    { model: 'Nemotron 120B', status: 'ok' },
+    { model: 'GPT OSS 120B', status: 'ok' },
   ],
   checks: [
     buildCheck('faq', 'FAQ structure', 20, true, '+11% citation lift'),

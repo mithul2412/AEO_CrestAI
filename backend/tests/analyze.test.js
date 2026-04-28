@@ -244,7 +244,7 @@ test('same markdown produces same GEO score', () => {
 })
 
 test('query payload normalizer preserves controlled failureMode enum', () => {
-  const payload = normalizeQueryPayload('Llama 3.3', {
+  const payload = normalizeQueryPayload('Qwen 3.6 Plus', {
     verdict: 'The answer is related but indirect.',
     queryMatchScore: 52,
     failureMode: 'Intent Mismatch',
