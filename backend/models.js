@@ -4,6 +4,7 @@ Return ONLY valid JSON with no extra text:
 {
   "verdict": "<1-2 sentences: would this page likely be cited for the query and why>",
   "queryMatchScore": <integer 0-100>,
+  "failureMode": "<one of: Access Failure, Extraction Failure, Retrieval Failure, Answer Failure, Evidence Failure, Structure Failure, Freshness Failure, Authority Risk, Intent Mismatch, Over-Optimization Risk>",
   "topGap": "<single most important missing element or structural weakness>",
   "suggestedFix": "<single highest-impact content change>"
 }
