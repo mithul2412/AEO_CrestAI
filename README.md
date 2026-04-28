@@ -63,7 +63,7 @@ Traditional SEO tools are strong at rankings, keywords, and backlinks. This prod
 - **GEU Score**
   checks answer front-loading, standalone sentences, sourced claims, and coherence
 - **LLM Baseline Score**
-  uses Llama 3.3 and Nemotron 120B to estimate overall GEO readiness
+  uses Qwen 3.6 Plus, Nemotron 120B, and GPT OSS 120B through OpenRouter to estimate overall GEO readiness
 
 ### 3. Query-Specific Scoring
 
@@ -76,7 +76,7 @@ Traditional SEO tools are strong at rankings, keywords, and backlinks. This prod
 
 - Lets users send a suggested fix straight into Ask The Expert
 - Preserves the page context inside chat
-- Supports both Llama and Nemotron responses for rewrite guidance
+- Supports Qwen, Nemotron, and GPT OSS responses for rewrite guidance
 
 ## Product View
 
@@ -103,7 +103,7 @@ The system is intentionally lightweight:
 - **Backend**
   Express API with fetch, analyze, and chat routes
 - **External Services**
-  Jina for page-to-markdown fetch, Groq for Llama 3.3, OpenRouter for Nemotron 120B
+  Jina for page-to-markdown fetch, OpenRouter for three-model analysis, and Tavily for search/competitor evidence
 
 For the full architecture and request flow, see [System Architecture](docs/system-architecture.md).
 
@@ -142,9 +142,9 @@ frontend/
 - Express
 - Node.js
 - Server-Sent Events
-- Groq API
 - OpenRouter API
 - Jina AI
+- Tavily
 - Jest
 - Vitest
 
@@ -173,9 +173,9 @@ Backend runs on `http://localhost:3001` and frontend runs on `http://localhost:5
 Backend expects:
 
 ```bash
-GROQ_API_KEY=...
 OPENROUTER_API_KEY=...
 JINA_API_KEY=... # optional
+TAVILY_API_KEY=... # optional, enables competitor and search evidence
 PORT=3001
 ```
 

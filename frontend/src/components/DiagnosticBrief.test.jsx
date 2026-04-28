@@ -26,7 +26,7 @@ const results = {
   gapScore: 22,
   verdicts: [
     {
-      model: 'Llama 3.3',
+      model: 'Qwen 3.6 Plus',
       queryMatchScore: 51,
       failureMode: 'Answer Failure',
       verdict: 'Useful but not direct.',
@@ -41,10 +41,19 @@ const results = {
       topGap: 'Needs evidence.',
       suggestedFix: 'Add a proof point.',
     },
+    {
+      model: 'GPT OSS 120B',
+      queryMatchScore: 54,
+      failureMode: 'Answer Failure',
+      verdict: 'Relevant but still not citation-ready.',
+      topGap: 'Needs stronger attribution.',
+      suggestedFix: 'Add a named source.',
+    },
   ],
   modelStatus: [
-    { model: 'Llama 3.3', status: 'ok' },
+    { model: 'Qwen 3.6 Plus', status: 'ok' },
     { model: 'Nemotron 120B', status: 'ok' },
+    { model: 'GPT OSS 120B', status: 'ok' },
   ],
   intelligence: {
     highestImpactFix: {

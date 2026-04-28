@@ -49,10 +49,13 @@ function scoreEvidence(markdown) {
   const citations = getCitationSignals(markdown)
   const numeric = getNumericSignals(markdown)
   const dated = /\b20(?:2[4-6])\b/.test(markdown)
+  const attributedQuote = /["“][^"”]{20,180}["”]\s*(?:,?\s*(?:said|according to|from|by)\b)?/i.test(markdown)
   return clampScore(
-    Math.min(citations.total, 5) * 13 +
+    Math.min(citations.urls.length, 4) * 10 +
+    Math.min(citations.attributions.length + citations.sourceNames.length, 5) * 11 +
     Math.min(numeric.length, 6) * 6 +
-    (dated ? 15 : 0)
+    (dated ? 12 : 0) +
+    (attributedQuote ? 9 : 0)
   )
 }
 
@@ -81,13 +84,51 @@ function scoreFreshness(markdown, extraction = {}) {
   return 30
 }
 
-function summarizeCitationReadiness({ accessScore, extractionScore, retrievalScore, answerScore, evidenceScore }) {
+function scoreAuthority(markdown, extraction = {}) {
+  const citations = getCitationSignals(markdown)
+  const hasOrgSchema = (extraction.schemaTypes || []).some(type => /Organization|Person|Article|FAQPage|Product/i.test(type))
+  const authorSignals = /\b(author|reviewed by|edited by|expert|methodology|about the author)\b/i.test(markdown)
+  return clampScore(
+    Math.min(citations.sourceNames.length + citations.attributions.length, 5) * 12 +
+    Math.min(citations.urls.length, 4) * 7 +
+    (hasOrgSchema ? 18 : 0) +
+    (authorSignals ? 12 : 0)
+  )
+}
+
+function scoreEntityAlignment(retrieval = {}) {
+  const top = retrieval.topChunks?.[0]
+  return clampScore(top?.entityAlignmentScore || 0)
+}
+
+function scoreSearchPresence(searchPresence = {}) {
+  if (!searchPresence) return null
+  if (searchPresence.status !== 'ok') return null
+  if (typeof searchPresence.domainRank !== 'number') return 35
+  if (searchPresence.domainRank <= 1) return 100
+  if (searchPresence.domainRank <= 3) return 85
+  if (searchPresence.domainRank <= 5) return 70
+  if (searchPresence.domainRank <= 10) return 55
+  return 40
+}
+
+function summarizeCitationReadiness({
+  accessScore,
+  extractionScore,
+  retrievalScore,
+  answerScore,
+  evidenceScore,
+  entityScore,
+  authorityScore,
+}) {
   const weak = []
   if (accessScore < 70) weak.push('access risk')
   if (extractionScore < 70) weak.push('extraction weakness')
   if (retrievalScore < 70) weak.push('retrieval fit')
   if (answerScore < 70) weak.push('direct answer clarity')
   if (evidenceScore < 55) weak.push('evidence')
+  if (entityScore < 55) weak.push('entity alignment')
+  if (authorityScore < 55) weak.push('authority proof')
 
   if (weak.length === 0) return 'Strong access, extraction, retrieval, answer clarity, and evidence signals.'
   return `Strongest opportunity: improve ${weak.slice(0, 2).join(' and ')}.`
@@ -99,7 +140,7 @@ function summarizeCitationReadinessWithCompetitor({ competitorGapScore, baseSumm
   return `${baseSummary} Discovered competitors appear more citation-ready for this query.`
 }
 
-export function buildQueryIntelligence({ markdown, query, pageIntelligence = {} }) {
+export function buildQueryIntelligence({ markdown, query, pageIntelligence = {}, searchPresence = null }) {
   const chunks = chunkMarkdown(markdown)
   const retrieval = analyzeRetrieval({ chunks, query })
   const answerExtraction = scoreAnswerExtraction(retrieval.topChunks[0])
@@ -108,14 +149,21 @@ export function buildQueryIntelligence({ markdown, query, pageIntelligence = {} 
   const evidenceScore = scoreEvidence(markdown)
   const structureScore = scoreStructure(markdown, pageIntelligence.extraction)
   const freshnessScore = scoreFreshness(markdown, pageIntelligence.extraction)
+  const entityScore = scoreEntityAlignment(retrieval)
+  const authorityScore = scoreAuthority(markdown, pageIntelligence.extraction)
+  const searchPresenceScore = scoreSearchPresence(searchPresence)
+  const searchWeight = typeof searchPresenceScore === 'number' ? 0.07 : 0
   const citationScore = clampScore(
-    accessScore * 0.1 +
-    extractionScore * 0.1 +
-    retrieval.retrievalScore * 0.25 +
-    answerExtraction.answerScore * 0.25 +
-    evidenceScore * 0.15 +
-    structureScore * 0.1 +
-    freshnessScore * 0.05
+    accessScore * 0.09 +
+    extractionScore * 0.09 +
+    retrieval.retrievalScore * 0.2 +
+    answerExtraction.answerScore * 0.2 +
+    evidenceScore * 0.14 +
+    structureScore * 0.09 +
+    freshnessScore * 0.05 +
+    entityScore * 0.07 +
+    authorityScore * 0.07 +
+    (searchPresenceScore || 0) * searchWeight
   )
 
   return {
@@ -130,6 +178,8 @@ export function buildQueryIntelligence({ markdown, query, pageIntelligence = {} 
         retrievalScore: retrieval.retrievalScore,
         answerScore: answerExtraction.answerScore,
         evidenceScore,
+        entityScore,
+        authorityScore,
       }),
       subscores: {
         accessScore,
@@ -139,6 +189,9 @@ export function buildQueryIntelligence({ markdown, query, pageIntelligence = {} 
         evidenceScore,
         structureScore,
         freshnessScore,
+        entityScore,
+        authorityScore,
+        ...(typeof searchPresenceScore === 'number' ? { searchPresenceScore } : {}),
       },
     },
   }
@@ -150,9 +203,10 @@ export function buildBaselineIntelligence({ markdown, pageIntelligence = {} }) {
       score: clampScore(
         scoreAccess(pageIntelligence.access) * 0.28 +
         scoreExtraction(pageIntelligence.extraction) * 0.28 +
-        scoreEvidence(markdown) * 0.22 +
-        scoreStructure(markdown, pageIntelligence.extraction) * 0.15 +
-        scoreFreshness(markdown, pageIntelligence.extraction) * 0.07
+        scoreEvidence(markdown) * 0.2 +
+        scoreStructure(markdown, pageIntelligence.extraction) * 0.14 +
+        scoreFreshness(markdown, pageIntelligence.extraction) * 0.06 +
+        scoreAuthority(markdown, pageIntelligence.extraction) * 0.04
       ),
       summary: 'Baseline citation readiness uses access, extraction, evidence, structure, and freshness until a query is added.',
     },
@@ -173,11 +227,13 @@ export function applyCompetitorGapScore(intelligence, competitorGapScore) {
   const citationScore = clampScore(
     subscores.accessScore * 0.1 +
     subscores.extractionScore * 0.1 +
-    subscores.retrievalScore * 0.2 +
-    subscores.answerScore * 0.2 +
-    subscores.evidenceScore * 0.15 +
-    subscores.structureScore * 0.1 +
+    subscores.retrievalScore * 0.18 +
+    subscores.answerScore * 0.18 +
+    subscores.evidenceScore * 0.14 +
+    subscores.structureScore * 0.09 +
     subscores.freshnessScore * 0.05 +
+    (subscores.entityScore || 0) * 0.07 +
+    (subscores.authorityScore || 0) * 0.07 +
     subscores.competitorGapScore * 0.1
   )
 

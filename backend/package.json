@@ -2,7 +2,9 @@
   "name": "aeo-scorer-backend",
   "type": "module",
   "scripts": {
-    "dev": "node --watch index.js",
+    "dev": "node index.js",
+    "dev:watch": "node --watch index.js",
+    "benchmark:aeo": "node scripts/aeoBenchmark.js",
     "test": "node --experimental-vm-modules ./node_modules/jest/bin/jest.js --runInBand"
   },
   "jest": {

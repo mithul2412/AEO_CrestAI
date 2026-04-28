@@ -51,12 +51,14 @@ const baselinePayload = {
   geuScore: 60,
   llmContentScore: 66,
   llmContentModels: [
-    { model: 'Llama 3.3', llmContentScore: 64, briefReason: 'Direct answer path is solid.' },
+    { model: 'Qwen 3.6 Plus', llmContentScore: 64, briefReason: 'Direct answer path is solid.' },
     { model: 'Nemotron 120B', llmContentScore: 68, briefReason: 'The structure is easy to extract.' },
+    { model: 'GPT OSS 120B', llmContentScore: 66, briefReason: 'The evidence is moderate.' },
   ],
   llmContentStatus: [
-    { model: 'Llama 3.3', status: 'ok' },
+    { model: 'Qwen 3.6 Plus', status: 'ok' },
     { model: 'Nemotron 120B', status: 'ok' },
+    { model: 'GPT OSS 120B', status: 'ok' },
   ],
   overallScore: 65,
   queryScore: null,
@@ -356,12 +358,14 @@ describe('App', () => {
         checks: baselinePayload.checks,
         geuChecks: baselinePayload.geuChecks,
         verdicts: [
-          { model: 'Llama 3.3', queryMatchScore: 48, failureMode: 'Answer Failure', verdict: 'Useful but not direct enough.', topGap: 'Needs a tighter opening answer.', suggestedFix: 'Lead with the answer in sentence one.' },
+          { model: 'Qwen 3.6 Plus', queryMatchScore: 48, failureMode: 'Answer Failure', verdict: 'Useful but not direct enough.', topGap: 'Needs a tighter opening answer.', suggestedFix: 'Lead with the answer in sentence one.' },
           { model: 'Nemotron 120B', queryMatchScore: 52, failureMode: 'Answer Failure', verdict: 'Reasonably aligned for the query.', topGap: 'Missing sharper comparison cues.', suggestedFix: 'Add a short answer-first comparison block.' },
+          { model: 'GPT OSS 120B', queryMatchScore: 50, failureMode: 'Answer Failure', verdict: 'Related but needs better proof.', topGap: 'Missing attribution.', suggestedFix: 'Add a named source.' },
         ],
         modelStatus: [
-          { model: 'Llama 3.3', status: 'ok' },
+          { model: 'Qwen 3.6 Plus', status: 'ok' },
           { model: 'Nemotron 120B', status: 'ok' },
+          { model: 'GPT OSS 120B', status: 'ok' },
         ],
       }))
 

@@ -8,7 +8,8 @@ import { generateHighestImpactFix } from '../services/fixGeneratorService.js'
 import { analyzeRetrieval } from '../services/retrievalService.js'
 import { buildCompetitorCorpus } from '../services/competitorCorpusService.js'
 import { compareUserVsCompetitors } from '../services/competitorGapService.js'
-import { discoverCompetitors, normalizeTavilyCompetitors } from '../services/tavilyService.js'
+import { buildQueryDiscovery } from '../services/queryDiscoveryService.js'
+import { buildSearchPresence, discoverCompetitors, normalizeTavilyCompetitors } from '../services/tavilyService.js'
 
 const app = express()
 app.use(express.json())
@@ -202,6 +203,41 @@ test('Tavily competitor filtering excludes source domain, duplicate, and bad URL
   expect(competitors).toHaveLength(1)
   expect(competitors[0].url).toBe('https://competitor.com/best-sales-enablement')
   expect(competitors[0].snippet).toBe('Compare sales tools')
+})
+
+test('query discovery builds brand and category query candidates', () => {
+  const discovery = buildQueryDiscovery({
+    query: 'best mobile providers',
+    sourceUrl: 'https://www.xfinity.com/mobile/',
+    markdown: '# Xfinity Mobile plans\n\nXfinity Mobile offers unlimited and by-the-gig wireless plans.',
+    pageIntelligence: {
+      extraction: {
+        title: 'Xfinity Mobile Plans',
+        h1: 'Xfinity Mobile plans',
+        headings: ['Xfinity Mobile plans', 'Unlimited data options'],
+      },
+    },
+  })
+
+  expect(discovery.status).toBe('ok')
+  expect(discovery.brand).toMatch(/xfinity/i)
+  expect(discovery.candidates).toContain('best mobile providers')
+  expect(discovery.candidates.join(' ')).toMatch(/xfinity/i)
+})
+
+test('search presence reports source-domain rank from raw search results', () => {
+  const presence = buildSearchPresence([
+    { title: 'Competitor', url: 'https://competitor.com/mobile', content: 'Other mobile plans', score: 0.9 },
+    { title: 'Xfinity Mobile', url: 'https://www.xfinity.com/mobile/', content: 'Xfinity mobile plans', score: 0.8 },
+  ], {
+    sourceUrl: 'https://www.xfinity.com/mobile/',
+    maxResults: 10,
+  })
+
+  expect(presence.status).toBe('ok')
+  expect(presence.sourceDomain).toBe('xfinity.com')
+  expect(presence.domainRank).toBe(2)
+  expect(presence.sourceResult.title).toBe('Xfinity Mobile')
 })
 
 test('Tavily discovery returns disabled state without an API key', async () => {
