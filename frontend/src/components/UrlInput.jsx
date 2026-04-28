@@ -14,6 +14,7 @@ export default function UrlInput({ url, onUrlChange, onFetchComplete }) {
   const [preview, setPreview] = useState('')
   const [charCount, setCharCount] = useState(0)
   const [chunkCount, setChunkCount] = useState(0)
+  const [fetchDigest, setFetchDigest] = useState(null)
   const [showPreview, setShowPreview] = useState(false)
   const [fetchDone, setFetchDone] = useState(false)
   const [streamState, setStreamState] = useState('idle')
@@ -37,6 +38,7 @@ export default function UrlInput({ url, onUrlChange, onFetchComplete }) {
     setPreview('')
     setCharCount(0)
     setChunkCount(0)
+    setFetchDigest(null)
     setFetchDone(false)
     setStreamState('connecting')
 
@@ -49,6 +51,12 @@ export default function UrlInput({ url, onUrlChange, onFetchComplete }) {
         const data = await res.json()
         setPreview(data.markdown)
         setCharCount(data.charCount)
+        setFetchDigest({
+          title: data.intelligence?.extraction?.title || 'Missing',
+          wordCount: data.intelligence?.extraction?.wordCount || 0,
+          accessStatus: data.intelligence?.access?.statusCode ? `HTTP ${data.intelligence.access.statusCode}` : 'Unknown access',
+          schema: data.intelligence?.extraction?.schemaTypes?.length ? data.intelligence.extraction.schemaTypes.join(', ') : 'None detected',
+        })
         setFetchDone(true)
         setStreamState('complete')
         onFetchComplete(data.markdown, data.charCount, data.sourceSignals || {}, data.intelligence || null, data.normalizedUrl || normalizedUrl)
@@ -88,6 +96,12 @@ export default function UrlInput({ url, onUrlChange, onFetchComplete }) {
       finished = true
       setPreview(data.markdown || streamedMarkdown)
       setCharCount(data.charCount || (data.markdown || streamedMarkdown).length)
+      setFetchDigest({
+        title: data.intelligence?.extraction?.title || 'Missing',
+        wordCount: data.intelligence?.extraction?.wordCount || 0,
+        accessStatus: data.intelligence?.access?.statusCode ? `HTTP ${data.intelligence.access.statusCode}` : 'Unknown access',
+        schema: data.intelligence?.extraction?.schemaTypes?.length ? data.intelligence.extraction.schemaTypes.join(', ') : 'None detected',
+      })
       setFetchDone(true)
       setStreamState('complete')
       setFetching(false)
@@ -183,10 +197,18 @@ export default function UrlInput({ url, onUrlChange, onFetchComplete }) {
                 className="tab-btn"
                 onClick={() => setShowPreview(value => !value)}
               >
-                {showPreview ? 'Hide' : 'Show'}
+                {showPreview ? 'Hide raw content' : 'View raw content'}
               </button>
             </span>
           </div>
+          {fetchDigest && (
+            <div className="fetch-signal-digest fetch-signal-digest--inline">
+              <span>Title: {fetchDigest.title}</span>
+              <span>Words: {fetchDigest.wordCount.toLocaleString()}</span>
+              <span>Access: {fetchDigest.accessStatus}</span>
+              <span>Schema: {fetchDigest.schema}</span>
+            </div>
+          )}
           {showPreview && (
             <div className="preview-textarea">
               {preview}

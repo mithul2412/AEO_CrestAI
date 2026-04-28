@@ -2,7 +2,7 @@
 import express from 'express'
 import { computeGeoScore } from '../utils/geoScorer.js'
 import { computeGeuScore } from '../utils/geuScorer.js'
-import analyzeRoute from '../routes/analyze.js'
+import analyzeRoute, { FAILURE_MODES, normalizeQueryPayload } from '../routes/analyze.js'
 
 const app = express()
 app.use(express.json())
@@ -241,6 +241,29 @@ test('same markdown produces same GEO score', () => {
   const { score: s1 } = computeGeoScore(sampleMarkdown)
   const { score: s2 } = computeGeoScore(sampleMarkdown)
   expect(s1).toBe(s2)
+})
+
+test('query payload normalizer preserves controlled failureMode enum', () => {
+  const payload = normalizeQueryPayload('Llama 3.3', {
+    verdict: 'The answer is related but indirect.',
+    queryMatchScore: 52,
+    failureMode: 'Intent Mismatch',
+    topGap: 'Missing exact plan answer.',
+    suggestedFix: 'Add a direct answer block.',
+  })
+
+  expect(FAILURE_MODES).toContain(payload.failureMode)
+  expect(payload.failureMode).toBe('Intent Mismatch')
+})
+
+test('query payload normalizer falls back for invalid failureMode', () => {
+  const payload = normalizeQueryPayload('Nemotron 120B', {
+    verdict: 'The answer is weak.',
+    queryMatchScore: 38,
+    failureMode: 'Vibes Failure',
+  })
+
+  expect(payload.failureMode).toBe('Answer Failure')
 })
 
 test('same markdown produces same GEU score', () => {

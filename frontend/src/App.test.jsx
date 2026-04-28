@@ -223,7 +223,20 @@ describe('App', () => {
     vi.unstubAllGlobals()
   })
 
-  it('streams fetch content and shows the baseline LLM score readout', async () => {
+  it('uses compact app chrome instead of workflow scroll navigation', () => {
+    render(<App />)
+
+    expect(screen.queryByLabelText('Primary workflow')).not.toBeInTheDocument()
+    expect(screen.queryByText('Analysis')).not.toBeInTheDocument()
+    expect(screen.queryByText('Rewrite Help')).not.toBeInTheDocument()
+
+    const themeButton = screen.getByRole('button', { name: 'Switch to dark theme' })
+    expect(themeButton).toBeInTheDocument()
+    fireEvent.click(themeButton)
+    expect(screen.getByRole('button', { name: 'Switch to light theme' })).toBeInTheDocument()
+  })
+
+  it('streams fetch content and shows the executive baseline summary first', async () => {
     fetch.mockResolvedValueOnce(createJsonResponse(baselinePayload))
 
     render(<App />)
@@ -249,15 +262,24 @@ describe('App', () => {
       })
     })
 
-    await screen.findByText('LLM Score')
-    expect(screen.getByText('Model baseline')).toBeInTheDocument()
-    expect(screen.getByText('LLM content readout')).toBeInTheDocument()
+    expect((await screen.findAllByText('Ready with risks')).length).toBeGreaterThan(0)
+    expect(screen.getByLabelText('Diagnostic workspace status')).toBeInTheDocument()
+    expect(screen.getByText('Current test is loaded')).toBeInTheDocument()
+    expect(screen.getByText('Page fetched')).toBeInTheDocument()
+    expect(screen.getByText('Baseline ready')).toBeInTheDocument()
+    expect(screen.getByText('Query waiting')).toBeInTheDocument()
+    expect(within(screen.getByLabelText('Diagnostic workspace status')).getByRole('button', { name: 'Run Query Test' })).toBeInTheDocument()
+    expect(screen.queryByLabelText('Primary workflow')).not.toBeInTheDocument()
+    expect(screen.queryByText('Choose the lens for this step')).not.toBeInTheDocument()
+    expect(screen.getByText('What happened')).toBeInTheDocument()
+    expect(screen.getByText('What to do next')).toBeInTheDocument()
+    expect(screen.getByText('Technical score details')).toBeInTheDocument()
     expect(screen.getByDisplayValue('https://example.com/article')).toBeInTheDocument()
-    expect(screen.getAllByText('Checks breakdown')).toHaveLength(1)
+    expect(screen.queryByText('Checks breakdown')).not.toBeInTheDocument()
 
-    const hero = screen.getByText('Overall AEO Score').closest('.overall-score-hero')
+    const hero = screen.getByText('Baseline Readiness').closest('.overall-score-hero')
     expect(hero).not.toBeNull()
-    expect(within(hero).getByText('Checks breakdown')).toBeInTheDocument()
+    expect(within(hero).getByText('Top blocker')).toBeInTheDocument()
 
     const analyzeBody = JSON.parse(fetch.mock.calls[0][1].body)
     expect(analyzeBody.sourceSignals.llmsTxt.present).toBe(true)
@@ -306,7 +328,7 @@ describe('App', () => {
       })
     })
 
-    await screen.findByText('LLM Score')
+    expect((await screen.findAllByText('Ready with risks')).length).toBeGreaterThan(0)
     expect(screen.getByText('3 opportunities - +25 pts potential')).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: 'Show optimizations' }))
@@ -323,7 +345,7 @@ describe('App', () => {
     expect(screen.getByDisplayValue('What is Example pricing?')).toBeInTheDocument()
   })
 
-  it('preserves the baseline LLM score during query re-score and uses content-query gap semantics', async () => {
+  it('preserves the baseline model score during query re-score and uses plain answer-gap semantics', async () => {
     fetch
       .mockResolvedValueOnce(createJsonResponse(baselinePayload))
       .mockResolvedValueOnce(createJsonResponse({
@@ -334,8 +356,8 @@ describe('App', () => {
         checks: baselinePayload.checks,
         geuChecks: baselinePayload.geuChecks,
         verdicts: [
-          { model: 'Llama 3.3', queryMatchScore: 48, verdict: 'Useful but not direct enough.', topGap: 'Needs a tighter opening answer.', suggestedFix: 'Lead with the answer in sentence one.' },
-          { model: 'Nemotron 120B', queryMatchScore: 52, verdict: 'Reasonably aligned for the query.', topGap: 'Missing sharper comparison cues.', suggestedFix: 'Add a short answer-first comparison block.' },
+          { model: 'Llama 3.3', queryMatchScore: 48, failureMode: 'Answer Failure', verdict: 'Useful but not direct enough.', topGap: 'Needs a tighter opening answer.', suggestedFix: 'Lead with the answer in sentence one.' },
+          { model: 'Nemotron 120B', queryMatchScore: 52, failureMode: 'Answer Failure', verdict: 'Reasonably aligned for the query.', topGap: 'Missing sharper comparison cues.', suggestedFix: 'Add a short answer-first comparison block.' },
         ],
         modelStatus: [
           { model: 'Llama 3.3', status: 'ok' },
@@ -361,45 +383,46 @@ describe('App', () => {
       })
     })
 
-    await screen.findByText('LLM Score')
-    expect(screen.getByText('Unlock side-by-side fixes from both models.')).toBeInTheDocument()
-
-    const tooltipTrigger = screen.getByRole('button', { name: 'What does GEU mean?' })
-    fireEvent.focus(tooltipTrigger)
-    expect(screen.getByRole('tooltip')).toHaveTextContent('Generative Engine Usability')
+    expect((await screen.findAllByText('Ready with risks')).length).toBeGreaterThan(0)
+    expect(screen.getByText('Add a query to preview direct answer quality.')).toBeInTheDocument()
 
     fireEvent.change(screen.getByPlaceholderText('e.g. what is the best CRM for small business?'), {
       target: { value: 'best ai crm' },
     })
     fireEvent.click(screen.getByRole('button', { name: 'Re-Score with Query' }))
 
-    await screen.findByText('Citation pipeline diagnosis')
-    fireEvent.click(screen.getByRole('button', { name: 'Score' }))
-    await screen.findByText('Model verdicts')
-    expect(screen.getAllByText('Content-Query Gap')).toHaveLength(2)
-    expect(screen.getByText('LLM content readout')).toBeInTheDocument()
-    expect(screen.getByText('Direct answer path is solid.')).toBeInTheDocument()
-    expect(screen.queryByText('Unlock side-by-side fixes from both models.')).not.toBeInTheDocument()
+    await screen.findByText('The answer path is weak')
+    expect(screen.getByLabelText('Diagnostic workspace status')).toBeInTheDocument()
+    expect(screen.getByText('Citation diagnosis is ready')).toBeInTheDocument()
+    expect(screen.queryByText('Score 67')).not.toBeInTheDocument()
+    expect(screen.queryByText('Gap +20')).not.toBeInTheDocument()
+    expect(within(screen.getByRole('group', { name: 'Workspace view' })).getByRole('button', { name: 'Summary' })).toBeInTheDocument()
+    expect(within(screen.getByRole('group', { name: 'Workspace view' })).getByRole('button', { name: 'Diagnostics' })).toBeInTheDocument()
+    expect(screen.queryByLabelText('Analysis workspace lenses')).not.toBeInTheDocument()
+    expect(screen.queryByText('Verdict first. Evidence when needed.')).not.toBeInTheDocument()
+    expect(screen.getAllByText('Answer gap').length).toBeGreaterThan(0)
+    expect(screen.getByText('Technical Diagnostics')).toBeInTheDocument()
+    expect(screen.queryByText('Useful but not direct enough.')).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /Technical Diagnostics/i }))
+    expect(screen.getByText('Useful but not direct enough.')).toBeInTheDocument()
+    expect(screen.queryByText('Add a query to preview direct answer quality.')).not.toBeInTheDocument()
 
     const analyzeBody = JSON.parse(fetch.mock.calls[1][1].body)
     expect(analyzeBody.baselineLlmContentScore).toBe(66)
     expect(analyzeBody.sourceUrl).toBe('https://example.com/article')
 
     await waitFor(() => {
-      expect(screen.getByText('High gap - direct answer quality trails the baseline content signals')).toBeInTheDocument()
+      expect(screen.getAllByText(/Large answer gap/).length).toBeGreaterThan(0)
     })
 
-    fireEvent.click(screen.getAllByRole('button', { name: /Send suggested fix from/ })[0])
-    expect(screen.getByDisplayValue(/Goal: improve the page for the query "best ai crm"/)).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Send to Rewrite Help' }))
+    expect(screen.getByDisplayValue(/Suggested fix: Lead with the answer in sentence one./)).toBeInTheDocument()
   })
 
-  it('locks Intelligence diagnostics until a target query is scored', async () => {
+  it('locks Diagnostics until a target query is scored', async () => {
     fetch.mockResolvedValueOnce(createJsonResponse(baselinePayload))
 
     render(<App />)
-
-    fireEvent.click(screen.getByRole('button', { name: 'Intelligence' }))
-    expect(screen.getByText('Fetch a page to inspect the citation pipeline.')).toBeInTheDocument()
 
     fireEvent.change(screen.getByPlaceholderText('https://example.com/page-to-analyze'), {
       target: { value: 'example.com/article' },
@@ -419,13 +442,13 @@ describe('App', () => {
       })
     })
 
-    await screen.findByText('LLM Score')
-    fireEvent.click(screen.getByRole('button', { name: 'Intelligence' }))
+    expect((await screen.findAllByText('Ready with risks')).length).toBeGreaterThan(0)
+    fireEvent.click(screen.getByRole('button', { name: 'Diagnostics' }))
     expect(screen.getByText('Run a target query to open the diagnostic timeline')).toBeInTheDocument()
     expect(screen.getByText(/Access and extraction have been collected/)).toBeInTheDocument()
   })
 
-  it('shows retrieval diagnosis, chunk view, and highest-impact fix in Intelligence mode after query scoring', async () => {
+  it('shows retrieval diagnosis, chunk view, and highest-impact fix in Diagnostics mode after query scoring', async () => {
     fetch
       .mockResolvedValueOnce(createJsonResponse(baselinePayload))
       .mockResolvedValueOnce(createJsonResponse({
@@ -459,7 +482,7 @@ describe('App', () => {
       })
     })
 
-    await screen.findByText('LLM Score')
+    expect((await screen.findAllByText('Ready with risks')).length).toBeGreaterThan(0)
     fireEvent.change(screen.getByPlaceholderText('e.g. what is the best CRM for small business?'), {
       target: { value: 'best ai crm' },
     })
@@ -469,24 +492,23 @@ describe('App', () => {
       expect(fetch).toHaveBeenCalledTimes(2)
     })
 
-    fireEvent.click(screen.getByRole('button', { name: 'Intelligence' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Diagnostics' }))
 
-    expect(await screen.findByText('Retrieval Fitness')).toBeInTheDocument()
+    expect(await screen.findByText('Best Match')).toBeInTheDocument()
     expect(screen.getByText('The target query maps to an early, usable chunk.')).toBeInTheDocument()
-    expect(screen.getByText('Competitive Citation Gap')).toBeInTheDocument()
+    expect(screen.getByText('Competitor Position')).toBeInTheDocument()
     expect(screen.getByText('The competitor chunk directly answers the query and includes fresher evidence.')).toBeInTheDocument()
-    expect(screen.getAllByText('Best CRM Software for Small Businesses').length).toBeGreaterThan(0)
     expect(screen.getByText('direct answer')).toBeInTheDocument()
     expect(screen.getByText('Add one specific statistic to the top answer block.')).toBeInTheDocument()
-    expect(screen.getByText('Chunk View')).toBeInTheDocument()
-    expect(screen.getByText('Confidence medium')).toBeInTheDocument()
+    expect(screen.getByText('Evidence Chunks')).toBeInTheDocument()
+    expect(screen.getByText('Fix certainty medium')).toBeInTheDocument()
 
     const analyzeBody = JSON.parse(fetch.mock.calls[1][1].body)
     expect(analyzeBody.pageIntelligence.access.statusCode).toBe(200)
     expect(analyzeBody.sourceUrl).toBe('https://example.com/article')
   })
 
-  it('renders user-win, disabled, and error states for Competitive Citation Gap', () => {
+  it('renders user-win, disabled, and error states for Competitor Gap', () => {
     const baseResults = {
       intelligence: {
         citationReadiness: {
@@ -537,7 +559,7 @@ describe('App', () => {
       />
     )
 
-    expect(screen.getByText('You have the stronger top chunk')).toBeInTheDocument()
+    expect(screen.getByText('Your page has the stronger top answer path')).toBeInTheDocument()
     expect(screen.getByText('Your top chunk is more citation-ready than the discovered competitor chunks for this query.')).toBeInTheDocument()
 
     rerender(
@@ -584,5 +606,43 @@ describe('App', () => {
 
     expect(screen.getByText('Competitor discovery failed.')).toBeInTheDocument()
     expect(screen.getByText('Tavily request failed')).toBeInTheDocument()
+  })
+
+  it('explains blocked access and Access Denied readability in plain language', () => {
+    render(
+      <IntelligencePanel
+        markdown="Access Denied\n\nRequest blocked."
+        pageIntelligence={{
+          access: {
+            statusCode: 403,
+            finalUrl: 'https://www.xfinity.com/',
+            canonical: 'https://www.xfinity.com/',
+            indexable: false,
+            robots: {
+              googlebot: 'allowed',
+              oaiSearchBot: 'allowed',
+              gptBot: 'allowed',
+              perplexityBot: 'allowed',
+            },
+            warnings: [],
+          },
+          extraction: {
+            title: 'Access Denied',
+            h1: 'Access Denied',
+            schemaTypes: [],
+            wordCount: 1188,
+            warnings: [],
+          },
+        }}
+        results={{ intelligence: {} }}
+        query=""
+      />
+    )
+
+    expect(screen.getByText('AI readers may be blocked')).toBeInTheDocument()
+    expect(screen.getByText(/automated readers are seeing an access-control page/)).toBeInTheDocument()
+    expect(screen.getByText('Search eligibility')).toBeInTheDocument()
+    expect(screen.getByText('AI is seeing a blocked page')).toBeInTheDocument()
+    expect(screen.getByText(/analyzing the blocked response rather than the customer-facing page/)).toBeInTheDocument()
   })
 })

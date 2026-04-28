@@ -16,7 +16,7 @@ describe('Verdicts', () => {
     vi.restoreAllMocks()
   })
 
-  it('shows clearer verdict labels, comparison bars, and fix actions', () => {
+  it('shows a plain query verdict first and keeps model detail behind technical notes', () => {
     const onSendToChat = vi.fn()
 
     render(
@@ -48,10 +48,15 @@ describe('Verdicts', () => {
       />
     )
 
-    expect(screen.getAllByText('See full verdict ->')).toHaveLength(2)
-    expect(screen.getByText('Baseline')).toBeInTheDocument()
-    expect(screen.getByText('Query')).toBeInTheDocument()
-    expect(screen.getAllByText('MED')).toHaveLength(2)
+    expect(screen.getByText('The answer path is weak')).toBeInTheDocument()
+    expect(screen.getByText('Model consensus')).toBeInTheDocument()
+    expect(screen.getByText(/Large answer gap/)).toBeInTheDocument()
+    expect(screen.queryByText('Useful but not direct enough.')).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: /Technical model notes/i }))
+
+    expect(screen.getByText('Useful but not direct enough.')).toBeInTheDocument()
+    expect(screen.getByText('Reasonably aligned for the query.')).toBeInTheDocument()
 
     fireEvent.click(screen.getAllByRole('button', { name: /Copy suggested fix from/ })[0])
     expect(navigator.clipboard.writeText).toHaveBeenCalledWith('Lead with the answer in sentence one.')

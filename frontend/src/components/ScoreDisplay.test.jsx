@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, within } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import ScoreDisplay from './ScoreDisplay.jsx'
 
@@ -31,23 +31,32 @@ const results = {
 }
 
 describe('ScoreDisplay', () => {
-  it('renders the checks breakdown inside the overall score hero and preserves tab switching', () => {
+  it('renders an executive summary first and hides technical scoring until requested', () => {
     render(<ScoreDisplay results={results} loading={false} />)
 
-    expect(screen.getAllByText('Checks breakdown')).toHaveLength(1)
+    expect(screen.getAllByText('Ready with risks').length).toBeGreaterThan(0)
+    expect(screen.getByText('What happened')).toBeInTheDocument()
+    expect(screen.getByText('Why it matters')).toBeInTheDocument()
+    expect(screen.getByText('What to do next')).toBeInTheDocument()
+    expect(screen.getByText('Top blocker')).toBeInTheDocument()
+    expect(screen.queryByText('Checks breakdown')).not.toBeInTheDocument()
+    expect(screen.queryByText('Technical model notes')).not.toBeInTheDocument()
 
-    const hero = screen.getByText('Overall AEO Score').closest('.overall-score-hero')
+    const hero = screen.getByText('Baseline Readiness').closest('.overall-score-hero')
     expect(hero).not.toBeNull()
 
-    const heroScope = within(hero)
-    expect(heroScope.getByText('Checks breakdown')).toBeInTheDocument()
-    expect(heroScope.getByRole('button', { name: 'Content 2/3' })).toBeInTheDocument()
-    expect(heroScope.getByRole('button', { name: 'GEU 2/2' })).toBeInTheDocument()
-    expect(heroScope.getByText('FAQ structure')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /Technical score details/i }))
 
-    fireEvent.click(heroScope.getByRole('button', { name: 'GEU 2/2' }))
+    expect(screen.getByText('Checks breakdown')).toBeInTheDocument()
+    expect(screen.getByText('Technical model notes')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /Checks breakdown/i }))
+    expect(screen.getByRole('button', { name: 'Page structure 2/3' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'AI usability 2/2' })).toBeInTheDocument()
+    expect(screen.getAllByText('FAQ structure').length).toBeGreaterThan(0)
 
-    expect(heroScope.getByText('Standalone sentences')).toBeInTheDocument()
-    expect(heroScope.queryByText('FAQ structure')).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'AI usability 2/2' }))
+
+    expect(screen.getAllByText('Standalone sentences').length).toBeGreaterThan(0)
+    expect(screen.getByText('Coherent opening')).toBeInTheDocument()
   })
 })
