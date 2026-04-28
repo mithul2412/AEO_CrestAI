@@ -315,6 +315,63 @@ function CompetitiveCitationGap({ competitor, query = '', queryAnalyzing = false
   )
 }
 
+function SearchPresence({ searchPresence, query = '', queryAnalyzing = false }) {
+  if (queryAnalyzing) {
+    return (
+      <section className="section panel intelligence-card">
+        <div className="section-head compact">
+          <div>
+            <div className="section-kicker">Search Evidence</div>
+            <div className="details-heading">Checking search presence</div>
+          </div>
+        </div>
+        <IntelligencePending title="Checking search presence">Looking for the source domain in discovered results...</IntelligencePending>
+      </section>
+    )
+  }
+
+  if (!query) return null
+
+  const presence = searchPresence || {}
+  const isOk = presence.status === 'ok'
+  const rank = presence.domainRank
+  const rankCopy = typeof rank === 'number'
+    ? `${presence.sourceDomain || 'Source domain'} appears at result #${rank}.`
+    : `${presence.sourceDomain || 'Source domain'} was not found in the discovered result set.`
+
+  return (
+    <section className="section panel intelligence-card">
+      <div className="section-head compact">
+        <div>
+          <div className="section-kicker">Search Evidence</div>
+          <div className="details-heading">Does the source appear for this query?</div>
+        </div>
+        <span className={`summary-pill ${isOk && typeof rank === 'number' ? scoreTone(Math.max(20, 110 - rank * 10)) : 'warn'}`}>
+          {isOk ? (typeof rank === 'number' ? `Rank #${rank}` : 'Not found') : 'Unavailable'}
+        </span>
+      </div>
+
+      <div className="retrieval-diagnosis">
+        {isOk ? rankCopy : (presence.reason || 'Search presence is unavailable.')}
+      </div>
+
+      {presence.results?.length > 0 && (
+        <div className="competitor-list">
+          {presence.results.slice(0, 5).map(result => (
+            <a key={`${result.rank}-${result.url}`} className="competitor-item" href={result.url} target="_blank" rel="noreferrer">
+              <div>
+                <strong>#{result.rank} {result.title || result.domain}</strong>
+                <span>{result.snippet || result.url}</span>
+              </div>
+              <small>{result.domain}</small>
+            </a>
+          ))}
+        </div>
+      )}
+    </section>
+  )
+}
+
 export default function IntelligencePanel({ markdown, pageIntelligence, results, query, queryAnalyzing = false }) {
   const access = pageIntelligence?.access || {}
   const extraction = pageIntelligence?.extraction || {}
@@ -323,6 +380,7 @@ export default function IntelligencePanel({ markdown, pageIntelligence, results,
   const retrieval = intelligence.retrieval
   const answer = intelligence.answerExtraction
   const competitor = intelligence.competitorIntelligence
+  const searchPresence = intelligence.searchPresence || competitor?.searchPresence
   const fix = intelligence.highestImpactFix
   const chunks = intelligence.chunks?.length ? intelligence.chunks : []
   const minimapChunks = useMemo(
@@ -487,7 +545,7 @@ export default function IntelligencePanel({ markdown, pageIntelligence, results,
             <>
               <div className="retrieval-diagnosis">{retrieval.diagnosis}</div>
               <div className="chunk-list">
-                {retrieval.topChunks.map(chunk => (
+                {(retrieval.topChunks || []).map(chunk => (
                   <article key={chunk.chunkId} id={`chunk-map-${chunk.chunkId}`} data-chunk-id={chunk.chunkId} className="chunk-card">
                     <div className="chunk-card-head">
                       <span>{chunk.chunkId} / {chunk.section}</span>
@@ -542,6 +600,8 @@ export default function IntelligencePanel({ markdown, pageIntelligence, results,
       </div>
 
       <CompetitiveCitationGap competitor={competitor} query={query} queryAnalyzing={queryAnalyzing} />
+
+      <SearchPresence searchPresence={searchPresence} query={query} queryAnalyzing={queryAnalyzing} />
 
       <section className="section panel intelligence-card">
         <div className="section-head compact">

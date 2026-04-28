@@ -1,18 +1,15 @@
 import { Router } from 'express'
-import fetch from 'node-fetch'
 import { computeGeoScore } from '../utils/geoScorer.js'
 import { computeGeuScore } from '../utils/geuScorer.js'
-import { truncateMarkdown } from '../utils/truncate.js'
 import { ANALYSIS_PROMPT, LLM_CONTENT_SCORE_PROMPT } from '../models.js'
 import { applyCompetitorGapScore, buildBaselineIntelligence, buildQueryIntelligence } from '../services/intelligenceScorer.js'
 import { generateHighestImpactFix } from '../services/fixGeneratorService.js'
 import { buildCompetitorCorpus } from '../services/competitorCorpusService.js'
 import { compareUserVsCompetitors } from '../services/competitorGapService.js'
+import { averageScores, runJsonModelPanel, truncateForModel } from '../services/openRouterModels.js'
+import { buildQueryDiscovery } from '../services/queryDiscoveryService.js'
 
 const router = Router()
-const OPENROUTER_CONTEXT_TOKENS = 3000
-const GROQ_CONTEXT_TOKENS = 1600
-const LLM_TIMEOUT_MS = 30_000
 export const FAILURE_MODES = [
   'Access Failure',
   'Extraction Failure',
@@ -26,35 +23,10 @@ export const FAILURE_MODES = [
   'Over-Optimization Risk',
 ]
 
-function buildProviderError(provider, status, rawText = '') {
-  const compact = rawText ? rawText.replace(/\s+/g, ' ').trim() : ''
-  if (status === 413) {
-    return `${provider} error 413: request too large (content exceeds provider limit).`
-  }
-  return compact
-    ? `${provider} error ${status}: ${compact}`
-    : `${provider} error ${status}`
-}
-
 function clampScore(value) {
   const numeric = Number(value)
   if (!Number.isFinite(numeric)) return null
   return Math.max(0, Math.min(100, Math.round(numeric)))
-}
-
-function safeJsonParse(text) {
-  try {
-    return JSON.parse(text)
-  } catch {
-    const jsonMatch = String(text || '').match(/\{[\s\S]*\}/)
-    if (!jsonMatch) throw new Error('Model did not return valid JSON')
-    return JSON.parse(jsonMatch[0])
-  }
-}
-
-function averageScores(scores) {
-  if (scores.length === 0) return null
-  return Math.round(scores.reduce((sum, value) => sum + value, 0) / scores.length)
 }
 
 export function normalizeFailureMode(value) {
@@ -88,108 +60,24 @@ function normalizeContentPayload(model, parsed) {
   }
 }
 
-async function callGroq(prompt, content, normalizer) {
-  if (!process.env.GROQ_API_KEY) {
-    throw new Error('Missing GROQ_API_KEY')
-  }
-
-  const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${process.env.GROQ_API_KEY}`,
-    },
-    body: JSON.stringify({
-      model: 'llama-3.3-70b-versatile',
-      response_format: { type: 'json_object' },
-      messages: [
-        { role: 'system', content: prompt },
-        { role: 'user', content }
-      ],
-      temperature: 0.2,
-      max_tokens: 450,
-    }),
-    signal: AbortSignal.timeout(LLM_TIMEOUT_MS),
-  })
-
-  if (!res.ok) {
-    const err = await res.text()
-    throw new Error(buildProviderError('Groq', res.status, err))
-  }
-
-  const data = await res.json()
-  return normalizer('Llama 3.3', safeJsonParse(data.choices?.[0]?.message?.content || ''))
-}
-
-async function callOpenRouter(prompt, content, normalizer) {
-  if (!process.env.OPENROUTER_API_KEY) {
-    throw new Error('Missing OPENROUTER_API_KEY')
-  }
-
-  const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY}`,
-    },
-    body: JSON.stringify({
-      model: 'nvidia/nemotron-3-super-120b-a12b:free',
-      messages: [
-        { role: 'system', content: prompt },
-        { role: 'user', content }
-      ],
-      max_tokens: 450,
-      temperature: 0.2,
-      response_format: { type: 'json_object' },
-    }),
-    signal: AbortSignal.timeout(LLM_TIMEOUT_MS),
-  })
-
-  if (!res.ok) {
-    const err = await res.text()
-    throw new Error(buildProviderError('OpenRouter', res.status, err))
-  }
-
-  const data = await res.json()
-  return normalizer('Nemotron 120B', safeJsonParse(data.choices?.[0]?.message?.content || ''))
-}
-
-function mapSettledStatus(settledResult, model) {
-  if (settledResult.status === 'fulfilled') {
-    return { model, status: 'ok' }
-  }
-  return {
-    model,
-    status: 'error',
-    error: settledResult.reason?.message || `Unknown ${model} error`
-  }
-}
-
 async function runLlmContentScore(markdown) {
-  const truncatedForGroq = truncateMarkdown(markdown, GROQ_CONTEXT_TOKENS)
-  const truncatedForOpenRouter = truncateMarkdown(markdown, OPENROUTER_CONTEXT_TOKENS)
-
-  const [groqResult, openRouterResult] = await Promise.allSettled([
-    callGroq(LLM_CONTENT_SCORE_PROMPT, `Content:\n${truncatedForGroq}`, normalizeContentPayload),
-    callOpenRouter(LLM_CONTENT_SCORE_PROMPT, `Content:\n${truncatedForOpenRouter}`, normalizeContentPayload),
-  ])
-
-  const llmContentModels = []
-  const llmContentStatus = [
-    mapSettledStatus(groqResult, 'Llama 3.3'),
-    mapSettledStatus(openRouterResult, 'Nemotron 120B'),
-  ]
-
-  if (groqResult.status === 'fulfilled') llmContentModels.push(groqResult.value)
-  if (openRouterResult.status === 'fulfilled') llmContentModels.push(openRouterResult.value)
-
+  const panel = await runJsonModelPanel({
+    prompt: LLM_CONTENT_SCORE_PROMPT,
+    buildContent: model => `Content:\n${truncateForModel(markdown, model)}`,
+    normalize: normalizeContentPayload,
+    maxTokens: 450,
+  })
   const llmContentScore = averageScores(
-    llmContentModels
+    panel.values
       .map(modelReadout => modelReadout.llmContentScore)
       .filter(score => typeof score === 'number')
   )
 
-  return { llmContentScore, llmContentModels, llmContentStatus }
+  return {
+    llmContentScore,
+    llmContentModels: panel.values,
+    llmContentStatus: panel.status,
+  }
 }
 
 router.post('/', async (req, res) => {
@@ -237,36 +125,36 @@ router.post('/', async (req, res) => {
       })
     }
 
-    const truncatedForGroq = truncateMarkdown(markdown, GROQ_CONTEXT_TOKENS)
-    const truncatedForOpenRouter = truncateMarkdown(markdown, OPENROUTER_CONTEXT_TOKENS)
+    const queryPanel = await runJsonModelPanel({
+      prompt: ANALYSIS_PROMPT,
+      buildContent: model => `Query: ${query}\n\nContent:\n${truncateForModel(markdown, model)}`,
+      normalize: normalizeQueryPayload,
+      maxTokens: 600,
+    })
+    const verdicts = queryPanel.values
+    const modelStatus = queryPanel.status
 
-    const [groqResult, openRouterResult] = await Promise.allSettled([
-      callGroq(ANALYSIS_PROMPT, `Query: ${query}\n\nContent:\n${truncatedForGroq}`, normalizeQueryPayload),
-      callOpenRouter(ANALYSIS_PROMPT, `Query: ${query}\n\nContent:\n${truncatedForOpenRouter}`, normalizeQueryPayload),
-    ])
-
-    const verdicts = []
-    if (groqResult.status === 'fulfilled') verdicts.push(groqResult.value)
-    if (openRouterResult.status === 'fulfilled') verdicts.push(openRouterResult.value)
-
-    const modelStatus = [
-      mapSettledStatus(groqResult, 'Llama 3.3'),
-      mapSettledStatus(openRouterResult, 'Nemotron 120B'),
-    ]
-
-    const queryScore = averageScores(
+    const llmQueryScore = averageScores(
       verdicts
         .map(verdict => verdict.queryMatchScore)
         .filter(score => typeof score === 'number')
     )
 
     const normalizedBaselineLlm = clampScore(baselineLlmContentScore)
-    const overallScore = buildOverallScore({
-      contentScore,
-      geuScore,
-      queryScore,
-      llmContentScore: normalizedBaselineLlm,
+    const queryDiscovery = buildQueryDiscovery({
+      query: query.trim(),
+      sourceUrl,
+      markdown,
+      pageIntelligence,
     })
+    let searchPresence = {
+      status: sourceUrl ? 'disabled' : 'disabled',
+      reason: sourceUrl ? 'Competitor search did not run.' : 'sourceUrl is required for search presence',
+      sourceDomain: '',
+      domainRank: null,
+      sourceResult: null,
+      results: [],
+    }
     let intelligenceBase = buildQueryIntelligence({
       markdown,
       query: query.trim(),
@@ -288,6 +176,13 @@ router.post('/', async (req, res) => {
           sourceUrl,
           maxCompetitors: 3,
         })
+        searchPresence = corpus.discovery?.searchPresence || searchPresence
+        intelligenceBase = buildQueryIntelligence({
+          markdown,
+          query: query.trim(),
+          pageIntelligence,
+          searchPresence,
+        })
         const gap = compareUserVsCompetitors({
           query: query.trim(),
           userChunks: intelligenceBase.chunks,
@@ -297,6 +192,7 @@ router.post('/', async (req, res) => {
         competitorIntelligence = {
           status: corpus.discovery?.status === 'ok' ? gap.status : corpus.discovery?.status || 'disabled',
           discovery: corpus.discovery,
+          searchPresence,
           competitors: corpus.competitors.map(competitor => ({
             sourceId: competitor.sourceId,
             title: competitor.title,
@@ -318,6 +214,7 @@ router.post('/', async (req, res) => {
           status: 'error',
           error: err.message || 'Competitor discovery failed',
           discovery: null,
+          searchPresence,
           competitors: [],
           gap: null,
           failures: [],
@@ -331,6 +228,15 @@ router.post('/', async (req, res) => {
       pageIntelligence,
     })
 
+    const deterministicQueryScore = clampScore(intelligenceBase?.citationReadiness?.score)
+    const queryScore = averageScores([llmQueryScore, deterministicQueryScore])
+    const overallScore = buildOverallScore({
+      contentScore,
+      geuScore,
+      queryScore,
+      llmContentScore: normalizedBaselineLlm,
+    })
+
     res.json({
       contentScore,
       geuScore,
@@ -339,6 +245,8 @@ router.post('/', async (req, res) => {
       llmContentStatus: [],
       overallScore,
       queryScore,
+      llmQueryScore,
+      deterministicQueryScore,
       gapScore: queryScore != null ? contentScore - queryScore : null,
       checks,
       geuChecks,
@@ -346,6 +254,8 @@ router.post('/', async (req, res) => {
       modelStatus,
       intelligence: {
         ...intelligenceBase,
+        queryDiscovery,
+        searchPresence,
         competitorIntelligence,
         highestImpactFix,
       },
