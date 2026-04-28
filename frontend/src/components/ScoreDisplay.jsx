@@ -1,159 +1,51 @@
-import { useEffect, useRef, useState } from 'react'
+import { useState } from 'react'
 import ParticleLoader from './ParticleLoader.jsx'
-import InfoTip from './InfoTip.jsx'
 
 function scoreLabel(score) {
   if (score == null) return { text: '', color: 'var(--text-3)' }
   if (score >= 80) return { text: 'Excellent', color: 'var(--success)' }
-  if (score >= 60) return { text: 'Strong', color: 'var(--accent)' }
+  if (score >= 60) return { text: 'Strong', color: 'var(--brand-signal)' }
   if (score >= 40) return { text: 'Moderate', color: 'var(--warning)' }
   return { text: 'Weak', color: 'var(--danger)' }
 }
 
+function executiveVerdict(results) {
+  const score = results?.overallScore ?? 0
+  if (score >= 75) return { text: 'Ready', tone: 'ok', next: 'Run a target query to confirm the exact answer path.' }
+  if (score >= 60) return { text: 'Ready with risks', tone: 'warn', next: 'Run a target query, then fix the biggest blocker before publishing.' }
+  if (score >= 40) return { text: 'Needs work', tone: 'warn', next: 'Fix the top blocker, then re-run the baseline.' }
+  return { text: 'Blocked', tone: 'danger', next: 'Resolve access or readability issues before judging the content.' }
+}
+
 function gapLabel(gap) {
   if (gap == null) return { text: '', color: 'var(--text-3)' }
-  if (gap >= 15) return { text: 'High gap - direct answer quality trails the baseline content signals', color: 'var(--danger)' }
-  if (gap >= 5) return { text: 'Moderate gap - sharpen the answer path for this query', color: 'var(--warning)' }
-  if (gap >= -5) return { text: 'Aligned', color: 'var(--success)' }
-  if (gap >= -15) return { text: 'Query-led strength - broaden supporting content signals', color: 'var(--warning)' }
-  return { text: 'Query significantly outpaces baseline AEO depth', color: 'var(--warning)' }
+  if (gap >= 15) return { text: 'Large answer gap - the exact query answer is weaker than the page looks overall', color: 'var(--danger)' }
+  if (gap >= 5) return { text: 'Moderate answer gap - sharpen the first answer for this query', color: 'var(--warning)' }
+  if (gap >= -5) return { text: 'Aligned - the page quality and target-query answer are moving together', color: 'var(--success)' }
+  if (gap >= -15) return { text: 'Query-led strength - the target answer is stronger than the broader page signals', color: 'var(--warning)' }
+  return { text: 'Query significantly outpaces the broader page quality', color: 'var(--warning)' }
 }
 
 function summarizeResults(results, gap) {
   if (!results) return ''
   if (results.queryScore == null) {
     if ((results.overallScore ?? 0) >= 70) {
-      return 'The page already looks structurally reusable. The next question is whether it answers a target query quickly enough.'
+      return 'The page looks structurally usable. The next decision is whether it answers the exact query quickly enough.'
     }
     if ((results.overallScore ?? 0) >= 50) {
-      return 'The baseline is usable, but not sharp. A query-specific check will show whether users feel that softness immediately.'
+      return 'The page can be analyzed, but the evidence is not yet strong enough to call it citation-ready.'
     }
-    return 'The page still looks hard to extract. Fix structure first, then test the query path.'
+    return 'The page may be hard for AI readers to access, parse, or reuse. Fix the first blocker before judging content quality.'
   }
 
-  if (gap >= 15) {
-    return 'The content contains useful material, but the direct answer path still makes the user work too hard.'
-  }
-  if (gap >= 5) {
-    return 'The page is close. Tighten the first answer block and make the supporting evidence easier to skim.'
-  }
-  if (gap >= -5) {
-    return 'Baseline quality and query match are mostly aligned. Improvements should focus on clarity rather than major restructuring.'
-  }
-  return 'The target answer is stronger than the broader content system. Support it with clearer evidence, structure, and citations.'
+  if (gap >= 15) return 'The page may look useful overall, but the exact query answer is still too hard to extract.'
+  if (gap >= 5) return 'The page is close. Tighten the first answer block and make proof easier to skim.'
+  if (gap >= -5) return 'The baseline quality and target query answer are mostly aligned.'
+  return 'The query answer is stronger than the rest of the page system. Support it with clearer structure and evidence.'
 }
 
-function ScoreRing({ score, color, size = 112, strokeWidth = 7 }) {
-  const [displayScore, setDisplayScore] = useState(0)
-  const animRef = useRef(null)
-  const radius = (size - strokeWidth * 2) / 2
-  const circumference = 2 * Math.PI * radius
-  const offset = circumference - (displayScore / 100) * circumference
-  const centerX = size / 2
-  const centerY = size / 2
-
-  const ticks = [0, 72, 144, 216, 288].map(deg => {
-    const radians = (deg * Math.PI) / 180
-    return { x: centerX + radius * Math.cos(radians), y: centerY + radius * Math.sin(radians) }
-  })
-
-  useEffect(() => {
-    if (score == null) return
-    const start = Date.now()
-    const duration = 1000
-
-    const tick = () => {
-      const elapsed = Date.now() - start
-      const progress = Math.min(elapsed / duration, 1)
-      const eased = 1 - Math.pow(1 - progress, 3)
-      setDisplayScore(Math.round(score * eased))
-      if (progress < 1) animRef.current = requestAnimationFrame(tick)
-    }
-
-    animRef.current = requestAnimationFrame(tick)
-    return () => cancelAnimationFrame(animRef.current)
-  }, [score])
-
-  return (
-    <div className="score-ring-wrap" style={{ width: size, height: size }}>
-      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
-        <circle cx={centerX} cy={centerY} r={radius} fill="none" stroke="var(--ring-track)" strokeWidth={strokeWidth} />
-        {ticks.map((tick, index) => (
-          <circle key={index} cx={tick.x} cy={tick.y} r={1.8} fill="var(--ring-tick)" />
-        ))}
-        <circle
-          cx={centerX}
-          cy={centerY}
-          r={radius}
-          fill="none"
-          stroke={color}
-          strokeWidth={strokeWidth}
-          strokeLinecap="round"
-          strokeDasharray={circumference}
-          strokeDashoffset={offset}
-          style={{ transition: 'stroke-dashoffset 0.06s linear' }}
-        />
-      </svg>
-      <div className="score-ring-center">
-        <span className="score-number" style={{ color }}>{displayScore}</span>
-      </div>
-    </div>
-  )
-}
-
-function metricTooltip(label) {
-  if (label === 'GEU') {
-    return 'Generative Engine Usability: how easily an AI can understand and trust your content.'
-  }
-  if (label === 'LLM Score') {
-    return 'Model baseline: how reusable the page looks to answer engines before a query is applied.'
-  }
-  return ''
-}
-
-function MetricCard({ label, sublabel, score, lockedText }) {
-  const semantic = scoreLabel(score)
-  const tooltip = metricTooltip(label)
-  const labelNode = (
-    <div className="score-trio-label-wrap">
-      <span className="score-trio-label">{label}</span>
-      {tooltip && <InfoTip label={label}>{tooltip}</InfoTip>}
-    </div>
-  )
-
-  if (typeof score !== 'number') {
-    return (
-      <div className="score-trio-item locked">
-        <div className="metric-score-head">
-          {labelNode}
-          <div className="score-trio-meta">Locked</div>
-        </div>
-        <div className="metric-score-visual">
-          <div className="score-ring-locked">{lockedText}</div>
-        </div>
-        <div className="score-trio-sub">{sublabel}</div>
-        <div className="metric-score-track metric-score-track--locked">
-          <span className="metric-score-track-fill" style={{ width: '0%' }} />
-        </div>
-      </div>
-    )
-  }
-
-  return (
-    <div className="score-trio-item">
-      <div className="metric-score-head">
-        {labelNode}
-        <div className="score-trio-meta" style={{ color: semantic.color }}>{semantic.text}</div>
-      </div>
-      <div className="metric-score-visual">
-        <ScoreRing score={score} color={semantic.color} />
-      </div>
-      <div className="score-trio-sub">{sublabel}</div>
-      <div className="metric-score-track">
-        <span className="metric-score-track-fill" style={{ width: `${score}%`, background: semantic.color }} />
-      </div>
-    </div>
-  )
+function topChecks(checks = [], passed = true, limit = 3) {
+  return checks.filter(check => check.passed === passed).slice(0, limit)
 }
 
 function ScoreBand({ label, score, note, lockedText, accentColor }) {
@@ -187,276 +79,287 @@ function ScoreBand({ label, score, note, lockedText, accentColor }) {
   )
 }
 
-export default function ScoreDisplay({ results, loading, error = '', onRetry = null }) {
-  const [activeTab, setActiveTab] = useState('geo')
+function TechnicalScoreMetric({ label, score, note }) {
+  const semantic = scoreLabel(score)
+  return (
+    <div className="technical-score-metric">
+      <span>{label}</span>
+      <strong style={{ color: semantic.color }}>{typeof score === 'number' ? score : '--'}</strong>
+      <small>{note}</small>
+    </div>
+  )
+}
+
+export default function ScoreDisplay({ results, loading, error = '', onRetry = null, onRunQueryTest = null }) {
+  const [activeTab, setActiveTab] = useState('content')
   const [checksOpen, setChecksOpen] = useState(false)
+  const [technicalOpen, setTechnicalOpen] = useState(false)
+
   const checks = results?.checks || []
   const geuChecks = results?.geuChecks || []
   const llmContentModels = results?.llmContentModels || []
   const llmContentStatus = results?.llmContentStatus || []
-  const passedGeo = checks.filter(check => check.passed).length
-  const passedGeu = geuChecks.filter(check => check.passed).length
+  const passedContent = checks.filter(check => check.passed).length
+  const passedUsability = geuChecks.filter(check => check.passed).length
   const gap = results?.gapScore ?? (results?.queryScore != null ? results.contentScore - results.queryScore : null)
   const summary = summarizeResults(results, gap)
+  const verdict = executiveVerdict(results)
   const llmErrors = llmContentStatus.filter(status => status.status === 'error')
-  const activeChecks = activeTab === 'geo' ? checks : geuChecks
-  const checksBreakdown = (
-    <div className="hero-checks-section">
-      <div
-        role="button"
-        tabIndex={0}
-        className="hero-checks-accordion-trigger"
-        onClick={() => setChecksOpen(v => !v)}
-        onKeyDown={e => {
-          if (e.key === 'Enter' || e.key === ' ') {
-            e.preventDefault()
-            setChecksOpen(v => !v)
-          }
-        }}
-        aria-expanded={checksOpen}
-      >
-        <div className="hero-checks-accordion-left">
-          <div className="details-heading">Checks breakdown</div>
-          <div className="details-subheading">
-            {passedGeo}/{checks.length} content · {passedGeu}/{geuChecks.length} GEU
-          </div>
-        </div>
-        <div className="hero-checks-accordion-right">
-          <div className="checks-tabs" onClick={e => e.stopPropagation()}>
-            <button
-              type="button"
-              className={`tab-btn${activeTab === 'geo' ? ' active geo' : ''}`}
-              onClick={() => { setActiveTab('geo'); setChecksOpen(true) }}
-            >
-              Content {passedGeo}/{checks.length}
-            </button>
-            <button
-              type="button"
-              className={`tab-btn${activeTab === 'geu' ? ' active geu' : ''}`}
-              onClick={() => { setActiveTab('geu'); setChecksOpen(true) }}
-            >
-              GEU {passedGeu}/{geuChecks.length}
-            </button>
-          </div>
-          <span className={`checks-chevron${checksOpen ? ' open' : ''}`}>▾</span>
-        </div>
-      </div>
+  const strengths = topChecks([...checks, ...geuChecks], true)
+  const blockers = topChecks([...checks, ...geuChecks], false)
+  const topStrength = strengths[0]?.label || 'No strong baseline signal is visible yet.'
+  const topBlocker = blockers[0]?.label || 'No major baseline blocker detected.'
+  const activeChecks = activeTab === 'content' ? checks : geuChecks
 
-      <div className={`checks-accordion-body${checksOpen ? ' open' : ''}`}>
-        <div className="checks-accordion-inner">
-        <div className="checks-list">
-          {activeChecks.map((check, index) => (
-            <div
-              key={check.id}
-              className={`check-row${check.passed ? ' passed-row' : ''}`}
-              style={{ animationDelay: `${index * 30}ms` }}
-            >
-              <div className="check-left">
-                <div className={`check-icon${check.passed ? ' passed' : ''}`}>
-                  {check.passed ? 'OK' : ''}
-                </div>
-                <span className={`check-name${check.passed ? ' passed' : ' failed'}`}>
-                  {check.label}
-                </span>
-              </div>
-              <div className="check-right">
-                {check.lift && <span className="check-lift">{check.lift}</span>}
-                <span className={`check-weight${check.passed ? ' passed' : ' failed'}`}>
-                  {check.weight} pts
-                </span>
-              </div>
-            </div>
-          ))}
-        </div>
-        </div>
+  if (loading) {
+    return <ParticleLoader label="Analyzing content signals..." />
+  }
+
+  if (!results) {
+    return error ? (
+      <div className="score-empty-state">
+        <div className="error-bar">Baseline analysis failed: {error}</div>
+        {onRetry && (
+          <button type="button" className="chip" onClick={onRetry}>
+            Retry baseline scoring
+          </button>
+        )}
       </div>
-    </div>
-  )
+    ) : (
+      <div className="score-empty-state">Fetch a page to start baseline scoring.</div>
+    )
+  }
 
   return (
-    <div>
-      {loading ? (
-        <ParticleLoader label="Analyzing content signals..." />
-      ) : results ? (
-        <div className="baseline-results">
-          <div className="score-overview-grid">
-            {results.overallScore != null && (
-              <div className="overall-score-hero">
-                <div className="overall-score-label">Overall AEO Score</div>
-                <div className="overall-score-main">
-                  <div className="overall-score-number" style={{ color: scoreLabel(results.overallScore).color }}>
-                    {results.overallScore}
-                  </div>
-                  <div className="overall-score-copy">
-                    <div className="overall-score-grade" style={{ color: scoreLabel(results.overallScore).color }}>
-                      {scoreLabel(results.overallScore).text}
-                    </div>
-                    <p className="overall-score-summary">{summary}</p>
-                    <div className="overall-score-formula">
-                      Content {results.contentScore} / GEU {results.geuScore}
-                      {typeof results.llmContentScore === 'number' && ` / LLM ${results.llmContentScore}`}
-                      {results.queryScore != null && ` / Query ${results.queryScore}`}
-                    </div>
-                  </div>
-                </div>
+    <div className="baseline-results">
+      <div className={`overall-score-hero overall-score-hero--${verdict.tone}`}>
+        <div className="overall-score-label">Baseline Readiness</div>
+        <div className="overall-score-main">
+          <div className="overall-score-number" style={{ color: scoreLabel(results.overallScore).color }}>
+            {results.overallScore}
+          </div>
+          <div className="overall-score-copy">
+            <div className={`overall-score-grade executive-verdict executive-verdict--${verdict.tone}`}>
+              {verdict.text}
+            </div>
+            <p className="overall-score-summary">{summary}</p>
+            <div className="executive-next-action">{verdict.next}</div>
+          </div>
+        </div>
 
-                <div className="score-summary-row">
-                  <span className="summary-pill ok">{passedGeo}/{checks.length || 0} content checks</span>
-                  <span className="summary-pill ok">{passedGeu}/{geuChecks.length || 0} GEU checks</span>
-                  <span className={`summary-pill ${llmErrors.length > 0 ? 'warn' : 'ok'}`}>
-                    {llmContentModels.length}/{Math.max(llmContentModels.length + llmErrors.length, 1)} LLMs responded
-                  </span>
-                </div>
+        <div className="executive-decision-grid">
+          <div className="executive-decision-item">
+            <span className="fix-label">What happened</span>
+            <strong>{verdict.text}</strong>
+            <p>{summary}</p>
+          </div>
+          <div className="executive-decision-item">
+            <span className="fix-label">Why it matters</span>
+            <strong>{results.queryScore == null ? 'Baseline only' : 'Query has been tested'}</strong>
+            <p>
+              {results.queryScore == null
+                ? 'This first pass checks whether the page is readable enough before judging a specific customer question.'
+                : 'The answer gap shows whether the page answers this exact query as well as its general page quality suggests.'}
+            </p>
+          </div>
+          <div className="executive-decision-item executive-decision-item--action">
+            <span className="fix-label">What to do next</span>
+            <strong>{results.queryScore == null ? 'Run Query Test' : 'Inspect Fix First'}</strong>
+            <p>{results.queryScore == null ? 'Test the question this page needs to win.' : 'Use Diagnostics to inspect the best chunk, competitor position, and one fix.'}</p>
+          </div>
+        </div>
 
-                {checksBreakdown}
+        <div className="baseline-decision-panel baseline-decision-panel--compact">
+          <div className="baseline-decision-column">
+            <span className="fix-label">Top strength</span>
+            <div className={`decision-list-item ${strengths.length > 0 ? 'good' : 'muted'}`}>{topStrength}</div>
+          </div>
+          <div className="baseline-decision-column">
+            <span className="fix-label">Top blocker</span>
+            <div className={`decision-list-item ${blockers.length > 0 ? 'warn' : 'good'}`}>{topBlocker}</div>
+          </div>
+        </div>
+
+        {results.queryScore != null && (() => {
+          const label = gapLabel(gap)
+          return (
+            <div className="answer-gap-callout">
+              <div>
+                <span className="fix-label">Answer gap</span>
+                <strong style={{ color: label.color }}>{gap >= 0 ? '+' : ''}{gap}</strong>
               </div>
-            )}
+              <p>{label.text}. This compares the page's general quality with how clearly it answers the exact query.</p>
+            </div>
+          )
+        })()}
 
-            <div className="score-trio score-trio--four">
-              <MetricCard label="Content" sublabel="Princeton KDD" score={results.contentScore} lockedText="Pending" />
-              <MetricCard label="GEU" sublabel="AutoGEO CMU" score={results.geuScore} lockedText="Pending" />
-              <MetricCard label="LLM Score" sublabel="Model baseline" score={results.llmContentScore} lockedText="LLM unavailable" />
-              <MetricCard label="Query Match" sublabel="vs. target query" score={results.queryScore} lockedText={'Add query\nto unlock'} />
+        {results.queryScore == null && onRunQueryTest && (
+          <div className="baseline-next-action">
+            <div>
+              <span className="fix-label">Next decision</span>
+              <p>Baseline is only the first pass. Run a target query to test whether the page can answer the question that matters.</p>
+            </div>
+            <button type="button" className="chip chip-primary" onClick={onRunQueryTest}>
+              Run Query Test
+            </button>
+          </div>
+        )}
+      </div>
+
+      <div className="details-panel score-band-panel baseline-technical-panel">
+        <button
+          type="button"
+          className="details-header evidence-disclosure-trigger technical-score-trigger"
+          aria-expanded={technicalOpen}
+          onClick={() => setTechnicalOpen(value => !value)}
+        >
+          <div>
+            <div className="details-heading">Technical score details</div>
+            <div className="details-subheading">
+              Optional scoring lenses, checks, and raw model notes for audit.
             </div>
           </div>
+          <span className={`checks-chevron${technicalOpen ? ' open' : ''}`}>v</span>
+        </button>
 
-          <div className="details-panel score-band-panel">
-            <div className="details-header">
-              <div>
-                <div className="details-heading">Score comparison</div>
-                <div className="details-subheading">
-                  A cleaner readout of how the four scoring lenses relate to each other.
-                </div>
-              </div>
+        {technicalOpen && (
+          <div className="technical-score-body">
+            <div className="score-summary-row">
+              <span className="summary-pill ok">{passedContent}/{checks.length || 0} page checks</span>
+              <span className="summary-pill ok">{passedUsability}/{geuChecks.length || 0} AI usability checks</span>
+              <span className={`summary-pill ${llmErrors.length > 0 ? 'warn' : 'ok'}`}>
+                {llmContentModels.length}/{Math.max(llmContentModels.length + llmErrors.length, 1)} models responded
+              </span>
+            </div>
+
+            <div className="technical-score-grid">
+              <TechnicalScoreMetric label="Page structure" score={results.contentScore} note="Content checks passed" />
+              <TechnicalScoreMetric label="AI usability" score={results.geuScore} note="Reusable answer signals" />
+              <TechnicalScoreMetric label="Model readability" score={results.llmContentScore} note="Baseline model read" />
+              <TechnicalScoreMetric label="Target query fit" score={results.queryScore} note="Unlocked after query scoring" />
             </div>
 
             <div className="score-band-list">
               <ScoreBand
-                label="Content"
+                label="Page structure"
                 score={results.contentScore}
-                note={`${passedGeo}/${checks.length || 0} content checks passed`}
-                accentColor="var(--accent)"
+                note={`${passedContent}/${checks.length || 0} page checks passed`}
+                accentColor="var(--model-b)"
               />
               <ScoreBand
-                label="GEU"
+                label="AI usability"
                 score={results.geuScore}
-                note={`${passedGeu}/${geuChecks.length || 0} GEU checks passed`}
-                accentColor="var(--success)"
+                note={`${passedUsability}/${geuChecks.length || 0} AI usability checks passed`}
+                accentColor="var(--model-b)"
               />
               <ScoreBand
-                label="LLM baseline"
+                label="Model readability"
                 score={results.llmContentScore}
-                note={`${llmContentModels.length}/${Math.max(llmContentModels.length + llmErrors.length, 1)} model baselines returned`}
+                note={`${llmContentModels.length}/${Math.max(llmContentModels.length + llmErrors.length, 1)} model baseline reads returned`}
                 lockedText="Baseline model readout is not available yet."
-                accentColor="var(--danger)"
+                accentColor="var(--model-b)"
               />
               <ScoreBand
-                label="Query match"
+                label="Target query fit"
                 score={results.queryScore}
                 note="How directly the page answers the target query."
                 lockedText="Add a target query to compare the answer path."
-                accentColor="var(--model-a)"
+                accentColor="var(--model-b)"
               />
             </div>
-          </div>
 
-          {results.queryScore != null && (() => {
-            const label = gapLabel(gap)
-            return (
-              <div className="gap-signal-card">
-                <div className="gap-signal-header">
-                  <div>
-                    <div className="gap-signal-heading">Signal Readout</div>
-                    <div className="gap-signal-copy">Compare baseline strength against direct answer quality for the target query.</div>
-                  </div>
-                  <div className="gap-signal-delta" style={{ color: label.color }}>
-                    {gap >= 0 ? '+' : ''}{gap}
+            <div className="hero-checks-section">
+              <button
+                type="button"
+                className="hero-checks-accordion-trigger"
+                onClick={() => setChecksOpen(value => !value)}
+                aria-expanded={checksOpen}
+              >
+                <div className="hero-checks-accordion-left">
+                  <div className="details-heading">Checks breakdown</div>
+                  <div className="details-subheading">
+                    {passedContent}/{checks.length} page checks / {passedUsability}/{geuChecks.length} AI usability checks
                   </div>
                 </div>
+                <span className={`checks-chevron${checksOpen ? ' open' : ''}`}>v</span>
+              </button>
 
-                <div className="gap-signal-bars">
-                  <div className="gap-signal-row">
-                    <span className="gap-signal-tag">Content</span>
-                    <div className="gap-signal-track">
-                      <div className="gap-signal-fill gap-signal-fill--content" style={{ width: `${results.contentScore}%` }} />
-                    </div>
-                    <span className="gap-signal-score" style={{ color: scoreLabel(results.contentScore).color }}>
-                      {results.contentScore}
-                    </span>
+              {checksOpen && (
+                <div className="checks-accordion-inner">
+                  <div className="checks-tabs">
+                    <button
+                      type="button"
+                      className={`tab-btn${activeTab === 'content' ? ' active geo' : ''}`}
+                      onClick={() => setActiveTab('content')}
+                    >
+                      Page structure {passedContent}/{checks.length}
+                    </button>
+                    <button
+                      type="button"
+                      className={`tab-btn${activeTab === 'usability' ? ' active geu' : ''}`}
+                      onClick={() => setActiveTab('usability')}
+                    >
+                      AI usability {passedUsability}/{geuChecks.length}
+                    </button>
                   </div>
-                  <div className="gap-signal-row">
-                    <span className="gap-signal-tag">Query</span>
-                    <div className="gap-signal-track">
-                      <div className="gap-signal-fill gap-signal-fill--query" style={{ width: `${results.queryScore}%` }} />
-                    </div>
-                    <span className="gap-signal-score" style={{ color: scoreLabel(results.queryScore).color }}>
-                      {results.queryScore}
-                    </span>
+                  <div className="checks-list">
+                    {activeChecks.map((check, index) => (
+                      <div
+                        key={check.id}
+                        className={`check-row${check.passed ? ' passed-row' : ''}`}
+                        style={{ animationDelay: `${index * 30}ms` }}
+                      >
+                        <div className="check-left">
+                          <div className={`check-icon${check.passed ? ' passed' : ''}`}>
+                            {check.passed ? 'OK' : ''}
+                          </div>
+                          <span className={`check-name${check.passed ? ' passed' : ' failed'}`}>
+                            {check.label}
+                          </span>
+                        </div>
+                        <div className="check-right">
+                          {check.lift && <span className="check-lift">{check.lift}</span>}
+                          <span className={`check-weight${check.passed ? ' passed' : ' failed'}`}>
+                            {check.weight} pts
+                          </span>
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 </div>
-
-                <div className="gap-signal-readout">
-                <div className="gap-signal-readout-right">
-                    <div className="gap-signal-label-row">
-                      <div className="gap-signal-metric-label">Content-Query Gap</div>
-                      <InfoTip label="Content-Query Gap" align="end">
-                        This score shows whether your query-specific content is stronger or weaker than the rest of the page.
-                      </InfoTip>
-                    </div>
-                    <div className="gap-signal-verdict" style={{ color: label.color }}>{label.text}</div>
-                  </div>
-                </div>
-              </div>
-            )
-          })()}
-
-          {(llmContentModels.length > 0 || llmErrors.length > 0) && (
-            <div className="details-panel baseline-details-panel">
-              <div className="details-header">
-                <div>
-                  <div className="details-heading">LLM content readout</div>
-                </div>
-              </div>
-
-              <div className="query-model-status-board">
-                {llmContentModels.map(modelReadout => (
-                  <div key={modelReadout.model} className="model-status-card ok">
-                    <div className="model-status-card-header">
-                      <strong>{modelReadout.model}</strong>
-                      <span>{modelReadout.llmContentScore ?? '--'}</span>
-                    </div>
-                    <p>{modelReadout.briefReason || 'Model returned a baseline score without an explanation.'}</p>
-                  </div>
-                ))}
-
-                {llmErrors.map(status => (
-                  <div key={`${status.model}-error`} className="model-status-card err">
-                    <div className="model-status-card-header">
-                      <strong>{status.model}</strong>
-                      <span>Failed</span>
-                    </div>
-                    <p>{status.error || 'No model response was returned.'}</p>
-                  </div>
-                ))}
-              </div>
+              )}
             </div>
-          )}
 
-        </div>
-      ) : error ? (
-        <div className="score-empty-state">
-          <div className="error-bar">Baseline analysis failed: {error}</div>
-          {onRetry && (
-            <button type="button" className="chip" onClick={onRetry}>
-              Retry baseline scoring
-            </button>
-          )}
-        </div>
-      ) : (
-        <div className="score-empty-state">
-          Fetch a page to start baseline scoring.
-        </div>
-      )}
+            {(llmContentModels.length > 0 || llmErrors.length > 0) && (
+              <div className="baseline-details-panel">
+                <div className="details-heading">Technical model notes</div>
+                <div className="details-subheading">Raw model notes are available for audit, but they are not the primary decision layer.</div>
+                <div className="query-model-status-board">
+                  {llmContentModels.map(modelReadout => (
+                    <div key={modelReadout.model} className="model-status-card ok">
+                      <div className="model-status-card-header">
+                        <strong>{modelReadout.model}</strong>
+                        <span>{modelReadout.llmContentScore ?? '--'}</span>
+                      </div>
+                      <p>{modelReadout.briefReason || 'Model returned a baseline score without an explanation.'}</p>
+                    </div>
+                  ))}
+
+                  {llmErrors.map(status => (
+                    <div key={`${status.model}-error`} className="model-status-card err">
+                      <div className="model-status-card-header">
+                        <strong>{status.model}</strong>
+                        <span>Failed</span>
+                      </div>
+                      <p>{status.error || 'No model response was returned.'}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
     </div>
   )
 }

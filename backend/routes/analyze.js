@@ -13,6 +13,18 @@ const router = Router()
 const OPENROUTER_CONTEXT_TOKENS = 3000
 const GROQ_CONTEXT_TOKENS = 1600
 const LLM_TIMEOUT_MS = 30_000
+export const FAILURE_MODES = [
+  'Access Failure',
+  'Extraction Failure',
+  'Retrieval Failure',
+  'Answer Failure',
+  'Evidence Failure',
+  'Structure Failure',
+  'Freshness Failure',
+  'Authority Risk',
+  'Intent Mismatch',
+  'Over-Optimization Risk',
+]
 
 function buildProviderError(provider, status, rawText = '') {
   const compact = rawText ? rawText.replace(/\s+/g, ' ').trim() : ''
@@ -45,6 +57,11 @@ function averageScores(scores) {
   return Math.round(scores.reduce((sum, value) => sum + value, 0) / scores.length)
 }
 
+export function normalizeFailureMode(value) {
+  const normalized = String(value || '').trim()
+  return FAILURE_MODES.includes(normalized) ? normalized : 'Answer Failure'
+}
+
 function buildOverallScore({ contentScore, geuScore, queryScore = null, llmContentScore = null }) {
   const scores = [contentScore, geuScore]
   if (typeof llmContentScore === 'number') scores.push(llmContentScore)
@@ -52,11 +69,12 @@ function buildOverallScore({ contentScore, geuScore, queryScore = null, llmConte
   return averageScores(scores)
 }
 
-function normalizeQueryPayload(model, parsed) {
+export function normalizeQueryPayload(model, parsed) {
   return {
     model,
     verdict: String(parsed.verdict || '').trim(),
     queryMatchScore: clampScore(parsed.queryMatchScore),
+    failureMode: normalizeFailureMode(parsed.failureMode),
     topGap: String(parsed.topGap || '').trim(),
     suggestedFix: String(parsed.suggestedFix || '').trim(),
   }
