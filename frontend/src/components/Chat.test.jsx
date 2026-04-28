@@ -33,7 +33,7 @@ describe('Chat', () => {
 
     render(<Chat markdown="# Test page" stage="post-fetch" />)
 
-    fireEvent.click(screen.getByRole('button', { name: 'What GEO/GEU signals are missing from this content?' }))
+    fireEvent.click(screen.getByRole('button', { name: 'What AI usability signals are missing from this content?' }))
 
     expect(await screen.findByText(/Llama answer with/)).toBeInTheDocument()
     expect(screen.getByRole('group', { name: 'Select model' })).toBeInTheDocument()
