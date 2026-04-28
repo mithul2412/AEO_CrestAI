@@ -26,8 +26,9 @@ describe('Chat', () => {
   it('shows a model toggle and switches between model responses for the same turn', async () => {
     fetch.mockResolvedValueOnce(createJsonResponse({
       responses: [
-        { model: 'Llama 3.3', response: 'Llama answer with **one** strong fix.' },
+        { model: 'Qwen 3.6 Plus', response: 'Qwen answer with **one** strong fix.' },
         { model: 'Nemotron 120B', response: 'Nemotron answer with `two` stronger fixes.' },
+        { model: 'GPT OSS 120B', response: 'GPT OSS answer with three stronger fixes.' },
       ],
     }))
 
@@ -35,14 +36,18 @@ describe('Chat', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'What AI usability signals are missing from this content?' }))
 
-    expect(await screen.findByText(/Llama answer with/)).toBeInTheDocument()
+    expect(await screen.findByText(/Qwen answer with/)).toBeInTheDocument()
     expect(screen.getByRole('group', { name: 'Select model' })).toBeInTheDocument()
     expect(screen.queryByText(/Nemotron answer with/)).not.toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: 'Nemotron' }))
 
     expect(await screen.findByText(/Nemotron answer with/)).toBeInTheDocument()
-    expect(screen.queryByText(/Llama answer with/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/Qwen answer with/)).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'GPT OSS' }))
+
+    expect(await screen.findByText(/GPT OSS answer with/)).toBeInTheDocument()
   })
 
   it('prefills the chat input when a verdict draft is provided', () => {

@@ -14,6 +14,11 @@ function buildAnswerCopy(query, pageIntelligence = {}) {
   return `${name} directly answers "${cleanQuery}" by stating the recommended answer first, then supporting it with specific evidence, examples, and source-backed details.`
 }
 
+function buildFaqCopy(query, pageIntelligence = {}) {
+  const cleanQuery = String(query || 'the target query').replace(/[?.!]+$/, '')
+  return `## ${cleanQuery}?\n\n${buildAnswerCopy(query, pageIntelligence)}\n\n- Key proof point: add one dated statistic or source-backed claim.\n- Best-fit context: explain who this answer is for and when it applies.\n- Citation support: link to the primary source or methodology behind the claim.`
+}
+
 export function generateHighestImpactFix({ query, intelligence, pageIntelligence = {} }) {
   const subscores = intelligence?.citationReadiness?.subscores || {}
   const access = pageIntelligence.access || {}
@@ -51,7 +56,7 @@ export function generateHighestImpactFix({ query, intelligence, pageIntelligence
       fix: 'Add a query-matched answer block near the top of the page.',
       whereToEdit: 'Immediately after the H1 or first intro paragraph.',
       why: retrieval.diagnosis || 'The best chunk does not strongly match the target query.',
-      exampleCopy: buildAnswerCopy(query, pageIntelligence),
+      exampleCopy: buildFaqCopy(query, pageIntelligence),
       expectedLift: { retrievalScore: '+14', answerScore: '+10' },
       confidence: 'medium-high',
     }
@@ -63,9 +68,21 @@ export function generateHighestImpactFix({ query, intelligence, pageIntelligence
       fix: 'Rewrite the top retrieved chunk so its first sentence is a standalone answer.',
       whereToEdit: retrieval.topChunks?.[0]?.section ? `Section: ${retrieval.topChunks[0].section}` : 'The top retrieved chunk.',
       why: answer.diagnosis || 'The chunk is relevant but hard for an AI answer engine to quote cleanly.',
-      exampleCopy: buildAnswerCopy(query, pageIntelligence),
+      exampleCopy: buildFaqCopy(query, pageIntelligence),
       expectedLift: { retrievalScore: '+6', answerScore: '+18' },
       confidence: 'medium-high',
+    }
+  }
+
+  if ((subscores.entityScore || 0) < 55) {
+    return {
+      failureMode: 'Intent Mismatch',
+      fix: 'Name the exact brand, product, category, and use case from the target query in the top answer block.',
+      whereToEdit: retrieval.topChunks?.[0]?.section ? `Section: ${retrieval.topChunks[0].section}` : 'The first answer block.',
+      why: 'AI retrieval systems need the query entities to appear together in a self-contained chunk before they can confidently cite it.',
+      exampleCopy: buildFaqCopy(query, pageIntelligence),
+      expectedLift: { retrievalScore: '+10', answerScore: '+6', entityScore: formatLift(70 - (subscores.entityScore || 0)) },
+      confidence: 'medium',
     }
   }
 
@@ -81,12 +98,24 @@ export function generateHighestImpactFix({ query, intelligence, pageIntelligence
     }
   }
 
+  if ((subscores.authorityScore || 0) < 55) {
+    return {
+      failureMode: 'Authority Risk',
+      fix: 'Add visible authority proof to the answer block and schema.',
+      whereToEdit: 'The answer block, author/reviewer area, and Article/Organization schema.',
+      why: 'Citable answers need traceable authorship, source attribution, and credible organization signals.',
+      exampleCopy: 'Add an author or reviewer line, an updated date, Organization or Article schema, and a sentence that cites the primary source behind the claim.',
+      expectedLift: { evidenceScore: '+8', authorityScore: formatLift(70 - (subscores.authorityScore || 0)) },
+      confidence: 'medium',
+    }
+  }
+
   return {
     failureMode: 'Structure Opportunity',
     fix: 'Turn the strongest answer into a short FAQ or comparison block.',
     whereToEdit: retrieval.topChunks?.[0]?.section ? `Section: ${retrieval.topChunks[0].section}` : 'Near the top retrieved answer.',
     why: 'The page is mostly ready; clearer structure can make the answer easier to reuse.',
-    exampleCopy: buildAnswerCopy(query, pageIntelligence),
+    exampleCopy: buildFaqCopy(query, pageIntelligence),
     expectedLift: { retrievalScore: '+5', answerScore: '+6' },
     confidence: 'medium',
   }

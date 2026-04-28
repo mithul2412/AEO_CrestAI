@@ -23,7 +23,7 @@ describe('Verdicts', () => {
       <Verdicts
         verdicts={[
           {
-            model: 'Llama 3.3',
+            model: 'Qwen 3.6 Plus',
             queryMatchScore: 48,
             verdict: 'Useful but not direct enough.',
             topGap: 'Needs a tighter opening answer.',
@@ -36,13 +36,21 @@ describe('Verdicts', () => {
             topGap: 'Missing sharper comparison cues.',
             suggestedFix: 'Add a short answer-first comparison block.',
           },
+          {
+            model: 'GPT OSS 120B',
+            queryMatchScore: 51,
+            verdict: 'The page is relevant but needs more source-backed proof.',
+            topGap: 'Missing evidence.',
+            suggestedFix: 'Add a sourced proof point.',
+          },
         ]}
         queryScore={50}
         contentScore={70}
         gapScore={20}
         modelStatus={[
-          { model: 'Llama 3.3', status: 'ok' },
+          { model: 'Qwen 3.6 Plus', status: 'ok' },
           { model: 'Nemotron 120B', status: 'ok' },
+          { model: 'GPT OSS 120B', status: 'ok' },
         ]}
         onSendToChat={onSendToChat}
       />

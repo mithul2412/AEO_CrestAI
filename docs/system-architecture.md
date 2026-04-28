@@ -2,15 +2,15 @@
 
 ## Overview
 
-The AEO Pre-Publish Scorer is a lightweight full-stack system with one frontend, one backend API, and three external service dependencies.
+The AEO Pre-Publish Scorer is a lightweight full-stack system with one frontend, one backend API, and external services for page fetch, model judgment, and search evidence.
 
 ```mermaid
 flowchart LR
     U[User] --> F[React Frontend]
     F --> B[Express Backend]
     B --> J[Jina Reader]
-    B --> G[Groq - Llama 3.3]
-    B --> O[OpenRouter - Nemotron 120B]
+    B --> O[OpenRouter - Qwen, Nemotron, GPT OSS]
+    B --> T[Tavily Search]
 ```
 
 ## Runtime Components
@@ -32,10 +32,10 @@ flowchart LR
 
 - **Jina**
   fetches live pages and returns markdown-friendly content
-- **Groq**
-  runs Llama 3.3 for baseline and query analysis
 - **OpenRouter**
-  runs Nemotron 120B for baseline and query analysis
+  runs Qwen 3.6 Plus, Nemotron 120B, and GPT OSS 120B for baseline, query analysis, and chat
+- **Tavily**
+  discovers search presence and competitor pages for target queries
 
 ## API Surface
 
@@ -80,6 +80,9 @@ Query mode returns:
 - gap score
 - verdicts
 - model status
+- query discovery candidates
+- search presence and approximate source-domain rank
+- competitor gap evidence and highest-impact fix
 
 ### `POST /chat`
 
@@ -149,6 +152,7 @@ This layer is:
 Implemented in:
 
 - `backend/routes/analyze.js`
+- `backend/services/openRouterModels.js`
 - `backend/models.js`
 
 This layer adds:
@@ -161,8 +165,8 @@ This layer adds:
 
 - **SSE for fetch**
   keeps page ingestion visible and alive in the UI
-- **two-model analysis**
-  reduces dependence on one provider's perspective
+- **three-model analysis**
+  compares Qwen, Nemotron, and GPT OSS judgments through OpenRouter
 - **baseline first, query second**
   keeps the workflow understandable
 - **gap metric**

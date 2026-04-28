@@ -202,23 +202,34 @@ export function getModelConsensus(verdicts = [], modelStatus = []) {
   if (!total) return { tier: 'muted', label: 'No model notes returned.' }
   if (responded.length < 2) return { tier: 'muted', label: `${responded.length}/${total} models responded.` }
 
-  const [first, second] = responded
-  const delta = Math.abs(first.queryMatchScore - second.queryMatchScore)
-  const firstMode = FAILURE_MODES.includes(first.failureMode) ? first.failureMode : null
-  const secondMode = FAILURE_MODES.includes(second.failureMode) ? second.failureMode : null
+  const scores = responded.map(verdict => verdict.queryMatchScore)
+  const spread = Math.max(...scores) - Math.min(...scores)
+  const modes = responded
+    .map(verdict => FAILURE_MODES.includes(verdict.failureMode) ? verdict.failureMode : null)
+    .filter(Boolean)
+  const modeCounts = modes.reduce((accumulator, mode) => {
+    accumulator[mode] = (accumulator[mode] || 0) + 1
+    return accumulator
+  }, {})
+  const majorityMode = Object.entries(modeCounts)
+    .sort((a, b) => b[1] - a[1])[0]
 
-  if (!firstMode || !secondMode) {
+  if (modes.length < responded.length) {
     return {
-      tier: delta <= 15 ? 'warn' : 'danger',
-      label: delta <= 15 ? 'Models gave similar scores.' : 'Model scores diverged.',
+      tier: spread <= 15 ? 'warn' : 'danger',
+      label: spread <= 15 ? 'Models gave similar scores.' : 'Model scores diverged.',
     }
   }
 
-  if (firstMode === secondMode) {
-    return { tier: 'ok', label: `Strong consensus: ${firstMode}.` }
+  if (majorityMode?.[1] === responded.length) {
+    return { tier: 'ok', label: `Strong consensus: ${majorityMode[0]}.` }
   }
 
-  if (delta <= 15 && scoreBand(first.queryMatchScore) === scoreBand(second.queryMatchScore)) {
+  if (majorityMode?.[1] >= 2 && spread <= 20) {
+    return { tier: 'warn', label: `Moderate consensus: ${majorityMode[0]}.` }
+  }
+
+  if (spread <= 15 && new Set(responded.map(verdict => scoreBand(verdict.queryMatchScore))).size === 1) {
     return { tier: 'warn', label: 'Moderate consensus: same score band, different failure modes.' }
   }
 

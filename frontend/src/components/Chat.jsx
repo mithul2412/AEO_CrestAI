@@ -3,8 +3,9 @@ import { readApiError } from '../utils/api.js'
 import WanderingEyes from './WanderingEyes.jsx'
 
 const MODELS = [
-  { id: 'Llama 3.3', label: 'Llama', className: 'llama' },
-  { id: 'Nemotron 120B', label: 'Nemotron', className: 'nemotron' }
+  { id: 'Qwen 3.6 Plus', label: 'Qwen', className: 'qwen' },
+  { id: 'Nemotron 120B', label: 'Nemotron', className: 'nemotron' },
+  { id: 'GPT OSS 120B', label: 'GPT OSS', className: 'gptoss' }
 ]
 
 const STAGE_SUGGESTIONS = {
@@ -173,7 +174,7 @@ function ModelResponse({ model, response }) {
           Copy
         </button>
       </div>
-      <div className={`msg-bubble ${model.className === 'llama' ? 'msg-llama' : 'msg-nemotron'}`}>
+      <div className={`msg-bubble msg-${model.className}`}>
         {renderStructured(response.content)}
       </div>
     </div>
@@ -236,12 +237,17 @@ export default function Chat({ markdown, stage = 'post-fetch', query = '', draft
     try {
       const history = turns.flatMap(turn => {
         const messages = [{ role: 'user', content: turn.prompt }]
-        MODELS.forEach(model => {
-          const response = turn.responses[model.id]
-          if (response?.status === 'ok' && response.content) {
-            messages.push({ role: 'assistant', content: response.content })
-          }
-        })
+        const modelResponses = MODELS
+          .map(model => {
+            const response = turn.responses[model.id]
+            return response?.status === 'ok' && response.content
+              ? `${model.id}: ${response.content}`
+              : ''
+          })
+          .filter(Boolean)
+        if (modelResponses.length > 0) {
+          messages.push({ role: 'assistant', content: modelResponses.join('\n\n') })
+        }
         return messages
       })
       history.push({ role: 'user', content: userText })
@@ -249,7 +255,7 @@ export default function Chat({ markdown, stage = 'post-fetch', query = '', draft
       const res = await fetch('/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages: history, markdown })
+        body: JSON.stringify({ messages: history, markdown, query })
       })
 
       if (!res.ok) {
@@ -296,7 +302,7 @@ export default function Chat({ markdown, stage = 'post-fetch', query = '', draft
               </button>
             ))}
           </div>
-          <span className="summary-pill ok">2 models live</span>
+          <span className="summary-pill ok">{MODELS.length} models live</span>
         </div>
       </div>
 
