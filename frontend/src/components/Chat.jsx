@@ -9,7 +9,7 @@ const MODELS = [
 
 const STAGE_SUGGESTIONS = {
   'post-fetch': [
-    'What GEO/GEU signals are missing from this content?',
+    'What AI usability signals are missing from this content?',
     'What is the biggest content gap?',
     'What structured data is missing?',
   ],
@@ -28,7 +28,7 @@ const STAGE_SUGGESTIONS = {
 const STAGE_META = {
   'post-fetch': {
     eyebrow: 'Context loaded',
-    title: 'Ask for the next content fix.',
+    title: 'Ask for rewrite help from the current page context.',
     description: '',
   },
   'post-query': {
@@ -37,7 +37,7 @@ const STAGE_META = {
     description: 'Use the query to tighten the answer-first path.',
   },
   'post-verdict': {
-    eyebrow: 'Verdicts ready',
+    eyebrow: 'Fix First ready',
     title: 'Turn the weakest section into a rewrite.',
     description: 'Switch models and compare priorities.',
   }
@@ -279,7 +279,7 @@ export default function Chat({ markdown, stage = 'post-fetch', query = '', draft
         <div className="chat-panel-header-left">
           <span className="chat-panel-dot" />
           <div className="chat-panel-title-wrap">
-            <span className="chat-panel-title">AEO Expert Chat</span>
+            <span className="chat-panel-title">Rewrite Help</span>
             <span className="chat-panel-subtitle">{stageMeta.eyebrow}</span>
           </div>
         </div>
