@@ -9,6 +9,7 @@ import {
   listApprovalRequests as listApprovalWorkflowRequests,
   rejectApprovalRequest,
 } from '../services/approvalWorkflowService.js'
+import { rescanAgenticProfile } from '../services/rescanService.js'
 import { getHostedProfileUrl } from '../generators/alternateLinkGenerator.js'
 import { getStorageInfo, listProfiles, saveProfile } from '../storage/agenticStore.js'
 
@@ -136,6 +137,17 @@ router.get('/profiles', (req, res) => {
     profiles: listProfiles(),
     storage: getStorageInfo(),
   })
+})
+
+router.post('/rescan/:slug', async (req, res) => {
+  try {
+    const result = await rescanAgenticProfile(req.params.slug, req.body || {})
+    return res.json(result)
+  } catch (err) {
+    return res.status(err.status || 500).json({
+      error: err.message || 'Agentic rescan failed',
+    })
+  }
 })
 
 router.get('/approvals', (req, res) => {

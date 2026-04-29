@@ -22,6 +22,7 @@ export function buildProfileRecord(input = {}, existing = null) {
     hostedProfile: input.hostedProfile || null,
     changeEvents: input.changeEvents || [],
     approval: input.approval || null,
+    monitoring: input.monitoring || existing?.monitoring || null,
     createdAt,
     updatedAt: timestamp,
     storedAt: timestamp,
@@ -53,6 +54,7 @@ function buildVersionSnapshot(record) {
     hostedProfile: record.hostedProfile,
     changeEvents: record.changeEvents || [],
     approval: record.approval || null,
+    monitoring: record.monitoring || null,
   }
 }
 
@@ -72,6 +74,7 @@ function getExistingVersionHistory(existing) {
     hostedProfile: existing.hostedProfile || null,
     changeEvents: existing.changeEvents || [],
     approval: existing.approval || null,
+    monitoring: existing.monitoring || null,
     createdAt: existing.createdAt || existing.storedAt || '',
     updatedAt: existing.updatedAt || existing.storedAt || '',
     storedAt: existing.storedAt || existing.updatedAt || '',
@@ -90,6 +93,7 @@ export function summarizeProfileRecord(record = {}) {
     createdAt: record.createdAt || '',
     version: record.version || 1,
     versionHistoryCount: Array.isArray(record.versionHistory) ? record.versionHistory.length : 0,
+    monitoring: record.monitoring || null,
     validationOk: Boolean(record.validation?.ok),
   }
 }
