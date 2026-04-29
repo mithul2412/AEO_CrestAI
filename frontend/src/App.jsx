@@ -6,6 +6,7 @@ import IntelligencePanel from './components/IntelligencePanel.jsx'
 import DiagnosticBrief from './components/DiagnosticBrief.jsx'
 import WanderingEyes from './components/WanderingEyes.jsx'
 import CrestLogo from './components/CrestLogo.jsx'
+import AgenticReadinessPanel from './components/AgenticReadinessPanel.jsx'
 import { readApiError } from './utils/api.js'
 
 const THEME_KEY = 'aeo-scorer-theme'
@@ -678,6 +679,17 @@ export default function App() {
                 onRunQueryTest={focusQueryInput}
               />
             </div>
+          )}
+
+          {activeMode === 'score' && hasBaseline && !hasQueryResults && (
+          {activeMode === 'score' && hasBaseline && (
+            <AgenticReadinessPanel
+              url={url}
+              markdown={markdown}
+              query={query}
+              analysis={activeResults}
+              sourceSignals={sourceSignals}
+            />
           )}
 
           {activeMode === 'score' && hasBaseline && !hasQueryResults && (
