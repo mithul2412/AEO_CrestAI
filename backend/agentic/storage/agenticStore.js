@@ -43,3 +43,27 @@ export function clearProfiles() {
 export function getStorageInfo() {
   return getAgenticStore().getStorageInfo()
 }
+
+export function createApprovalRequest(input) {
+  return getAgenticStore().createApprovalRequest(input)
+}
+
+export function getApprovalRequest(id) {
+  return getAgenticStore().getApprovalRequest(id)
+}
+
+export function listApprovalRequests(filters) {
+  return getAgenticStore().listApprovalRequests(filters)
+}
+
+export function updateApprovalRequest(id, updates) {
+  return getAgenticStore().updateApprovalRequest(id, updates)
+}
+
+export function updateApprovalRequestStatus(id, status, options) {
+  return getAgenticStore().updateApprovalRequestStatus(id, status, options)
+}
+
+export function clearApprovalRequests() {
+  return getAgenticStore().clearApprovalRequests()
+}
