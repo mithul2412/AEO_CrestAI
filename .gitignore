@@ -7,3 +7,4 @@ dist/
 .npm-cache/
 .tools/
 backend/benchmark-results/
+backend/data/agentic-profiles/*.json

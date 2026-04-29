@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url'
 import express from 'express'
 import agenticRoutes from '../agentic/routes/agenticRoutes.js'
 import hostedProfileRoutes from '../agentic/routes/hostedProfileRoutes.js'
-import { clearProfiles } from '../agentic/storage/inMemoryAgenticStore.js'
+import { clearProfiles, resetAgenticStoreForTests } from '../agentic/storage/agenticStore.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const fixtureMarkdown = fs.readFileSync(path.join(__dirname, 'fixtures', 'agenticSampleMarkdown.md'), 'utf8')
@@ -12,6 +12,8 @@ const fixtureMarkdown = fs.readFileSync(path.join(__dirname, 'fixtures', 'agenti
 let portCounter = 5100
 const originalEnableFlag = process.env.ENABLE_AGENTIC_LAYER
 const originalBaseUrl = process.env.AGENTIC_PROFILE_BASE_URL
+const originalStorage = process.env.AGENTIC_PROFILE_STORAGE
+const originalDataDir = process.env.AGENTIC_PROFILE_DATA_DIR
 
 function createApp() {
   const app = express()
@@ -77,9 +79,12 @@ async function generateProfile(app) {
 }
 
 beforeEach(() => {
-  clearProfiles()
   process.env.ENABLE_AGENTIC_LAYER = 'true'
   process.env.AGENTIC_PROFILE_BASE_URL = 'http://localhost:3001/agent'
+  delete process.env.AGENTIC_PROFILE_STORAGE
+  delete process.env.AGENTIC_PROFILE_DATA_DIR
+  resetAgenticStoreForTests()
+  clearProfiles()
 })
 
 afterAll(() => {
@@ -93,6 +98,18 @@ afterAll(() => {
     delete process.env.AGENTIC_PROFILE_BASE_URL
   } else {
     process.env.AGENTIC_PROFILE_BASE_URL = originalBaseUrl
+  }
+
+  if (originalStorage === undefined) {
+    delete process.env.AGENTIC_PROFILE_STORAGE
+  } else {
+    process.env.AGENTIC_PROFILE_STORAGE = originalStorage
+  }
+
+  if (originalDataDir === undefined) {
+    delete process.env.AGENTIC_PROFILE_DATA_DIR
+  } else {
+    process.env.AGENTIC_PROFILE_DATA_DIR = originalDataDir
   }
 })
 

@@ -1,37 +1,53 @@
-const profilesBySlug = new Map()
+import { buildProfileRecord, summarizeProfileRecord } from './profileRecord.js'
 
-export function saveProfile({ slug, profile, artifacts, validation, engineReadiness }) {
-  const storedAt = new Date().toISOString()
-  const record = {
-    slug,
-    profile,
-    artifacts,
-    validation,
-    engineReadiness,
-    storedAt,
+export function createInMemoryAgenticStore() {
+  const profilesBySlug = new Map()
+
+  return {
+    type: 'memory',
+
+    saveProfile(input) {
+      const existing = profilesBySlug.get(input.slug)
+      const record = buildProfileRecord(input, existing)
+      profilesBySlug.set(record.slug, record)
+      return record
+    },
+
+    getProfile(slug) {
+      return profilesBySlug.get(slug) || null
+    },
+
+    listProfiles() {
+      return [...profilesBySlug.values()].map(summarizeProfileRecord)
+    },
+
+    clearProfiles() {
+      profilesBySlug.clear()
+    },
+
+    getStorageInfo() {
+      return {
+        type: 'memory',
+        warning: 'In-memory hosted profiles disappear when the backend process restarts.',
+      }
+    },
   }
+}
 
-  profilesBySlug.set(slug, record)
-  return record
+const defaultStore = createInMemoryAgenticStore()
+
+export function saveProfile(input) {
+  return defaultStore.saveProfile(input)
 }
 
 export function getProfile(slug) {
-  return profilesBySlug.get(slug) || null
+  return defaultStore.getProfile(slug)
 }
 
 export function listProfiles() {
-  return [...profilesBySlug.values()].map(record => ({
-    slug: record.slug,
-    profileId: record.profile?.profileId || '',
-    businessName: record.profile?.business?.name || '',
-    domain: record.profile?.business?.domain || '',
-    sourceUrl: record.profile?.source?.sourceUrl || '',
-    updatedAt: record.profile?.metadata?.updatedAt || '',
-    storedAt: record.storedAt,
-    validationOk: Boolean(record.validation?.ok),
-  }))
+  return defaultStore.listProfiles()
 }
 
 export function clearProfiles() {
-  profilesBySlug.clear()
+  return defaultStore.clearProfiles()
 }

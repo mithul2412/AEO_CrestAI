@@ -1,6 +1,6 @@
 import { Router } from 'express'
 import { buildHostedProfileHtml, buildHostedProfileJson, buildHostedProfileMarkdown } from '../services/hostedProfileService.js'
-import { getProfile } from '../storage/inMemoryAgenticStore.js'
+import { getProfile } from '../storage/agenticStore.js'
 
 const router = Router()
 
