@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import ArtifactTabs from './ArtifactTabs.jsx'
+import AgenticMonitoringPanel from './AgenticMonitoringPanel.jsx'
 import { generateAgenticLayer } from '../utils/agenticApi.js'
 
 export default function AgenticReadinessPanel({
@@ -41,6 +42,18 @@ export default function AgenticReadinessPanel({
     }
   }, [analysis, markdown, query, ready, sourceSignals, url])
 
+  const handleResultUpdate = useCallback(update => {
+    setResult(current => current ? {
+      ...current,
+      ...update,
+      canonicalProfile: update.canonicalProfile || current.canonicalProfile,
+      artifacts: update.artifacts || current.artifacts,
+      hostedProfile: update.hostedProfile || current.hostedProfile,
+      validation: update.validation || current.validation,
+      engineReadiness: update.engineReadiness || current.engineReadiness,
+    } : current)
+  }, [])
+
   if (!analysis) return null
 
   return (
@@ -81,7 +94,12 @@ export default function AgenticReadinessPanel({
         </div>
       )}
 
-      {result && <ArtifactTabs result={result} />}
+      {result && (
+        <>
+          <ArtifactTabs result={result} />
+          <AgenticMonitoringPanel result={result} onResultUpdate={handleResultUpdate} />
+        </>
+      )}
     </div>
   )
 }
