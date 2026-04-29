@@ -8,6 +8,8 @@ export default defineConfig({
       '/fetch': 'http://localhost:3001',
       '/analyze': 'http://localhost:3001',
       '/chat': 'http://localhost:3001',
+      '/agentic': 'http://localhost:3001',
+      '/agent': 'http://localhost:3001',
     }
   },
   test: {

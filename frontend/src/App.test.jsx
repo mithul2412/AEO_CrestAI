@@ -213,6 +213,122 @@ const queryIntelligencePayload = {
   },
 }
 
+const agenticPayload = {
+  profileId: 'profile-example-com',
+  slug: 'example-com',
+  canonicalProfile: {
+    source: {
+      sourceUrl: 'https://example.com/article',
+      origin: 'https://example.com',
+    },
+    business: {
+      name: 'Example',
+      domain: 'example.com',
+      description: 'Example helps teams prepare content for AI systems.',
+    },
+    metadata: {
+      updatedAt: '2026-04-28T07:00:00.000Z',
+    },
+  },
+  artifacts: {
+    llmsTxt: '# Example\n\n## AI-readable profile\n- http://localhost:3001/agent/example-com',
+    llmsFullTxt: '# Example AI-readable Profile\n\nSource URL: https://example.com/article',
+    jsonLd: [{ '@context': 'https://schema.org', '@type': 'Organization', name: 'Example' }],
+    faqBlock: [{ question: 'What is Example?', answer: 'Example prepares content.', sourceUrl: 'https://example.com/article' }],
+    actionMetadata: [{ id: 'action-contact', type: 'contact', label: 'Contact', url: 'https://example.com/contact', status: 'active' }],
+    claimSourceMap: [{ claim: 'Example prepares content.', sourceUrl: 'https://example.com/article', sourceText: 'Example prepares content.' }],
+    structuredServiceProductData: [{ id: 'service-example', type: 'service', name: 'AI content readiness' }],
+    robotsRecommendations: [{ engine: 'ChatGPT', userAgents: ['OAI-SearchBot'], recommendation: 'Allow when policy permits.' }],
+    alternateLinkSnippet: '<link rel="alternate" type="application/json" href="http://localhost:3001/agent/example-com.json" title="AI-readable business profile" />',
+  },
+  hostedProfile: {
+    htmlUrl: 'http://localhost:3001/agent/example-com',
+    jsonUrl: 'http://localhost:3001/agent/example-com.json',
+    markdownUrl: 'http://localhost:3001/agent/example-com.md',
+  },
+  validation: {
+    ok: true,
+    approvalRequired: false,
+    warnings: [],
+    errors: [],
+    checks: [
+      { id: 'jsonld-array', label: 'JSON-LD is an array', status: 'pass', message: 'jsonLd is an array' },
+    ],
+  },
+  engineReadiness: {
+    chatgpt: { score: 86, checks: [{ id: 'jsonld', label: 'JSON-LD exists', passed: true }] },
+    perplexity: { score: 82, checks: [] },
+    google: { score: 84, checks: [] },
+    claude: { score: 80, checks: [] },
+  },
+  warnings: [],
+}
+
+const agenticProfilesPayload = {
+  profiles: [
+    {
+      slug: 'example-com',
+      profileId: 'profile-example-com',
+      businessName: 'Example',
+      domain: 'example.com',
+      sourceUrl: 'https://example.com/article',
+      updatedAt: '2026-04-28T07:00:00.000Z',
+      storedAt: '2026-04-28T07:00:00.000Z',
+      version: 1,
+      monitoring: {
+        lastScannedAt: '2026-04-28T07:30:00.000Z',
+        lastChangeDetectedAt: '',
+        lastRescanStatus: 'no_changes',
+        lastRescanSummary: 'Rescan completed with no profile changes detected.',
+      },
+      validationOk: true,
+    },
+  ],
+}
+
+const pendingApproval = {
+  id: 'apr-example-pricing',
+  slug: 'example-com',
+  profileId: 'profile-example-com',
+  status: 'pending',
+  changeEventIds: ['evt-pricing'],
+  eventSummaries: [
+    {
+      id: 'evt-pricing',
+      type: 'pricing_changed',
+      path: 'claims[pricing]',
+      summary: 'pricing_changed at claims[pricing]',
+      affected_artifacts: ['hosted_profile', 'json_ld'],
+      approval_required: true,
+    },
+  ],
+  affectedArtifacts: ['hosted_profile', 'json_ld'],
+  oldValues: [{ eventId: 'evt-pricing', path: 'claims[pricing]', value: 'Pricing starts at $8,000 per month.' }],
+  newValues: [{ eventId: 'evt-pricing', path: 'claims[pricing]', value: 'Pricing starts at $12,000 per month.' }],
+  createdAt: '2026-04-28T07:45:00.000Z',
+  reviewedAt: '',
+  reviewerNote: '',
+}
+
+const pendingApprovalTwo = {
+  ...pendingApproval,
+  id: 'apr-example-policy',
+  changeEventIds: ['evt-policy'],
+  eventSummaries: [
+    {
+      id: 'evt-policy',
+      type: 'policy_changed',
+      path: 'policies',
+      summary: 'policy_changed at policies',
+      affected_artifacts: ['hosted_profile'],
+      approval_required: true,
+    },
+  ],
+  affectedArtifacts: ['hosted_profile'],
+  oldValues: [{ eventId: 'evt-policy', path: 'policies', value: 'Old refund policy.' }],
+  newValues: [{ eventId: 'evt-policy', path: 'policies', value: 'New refund policy.' }],
+}
+
 describe('App', () => {
   beforeEach(() => {
     MockEventSource.instances = []
@@ -268,7 +384,7 @@ describe('App', () => {
     expect(screen.getByLabelText('Diagnostic workspace status')).toBeInTheDocument()
     expect(screen.getByText('Current test is loaded')).toBeInTheDocument()
     expect(screen.getByText('Page fetched')).toBeInTheDocument()
-    expect(screen.getByText('Baseline ready')).toBeInTheDocument()
+    expect(screen.getAllByText('Baseline ready').length).toBeGreaterThan(0)
     expect(screen.getByText('Query waiting')).toBeInTheDocument()
     expect(within(screen.getByLabelText('Diagnostic workspace status')).getByRole('button', { name: 'Run Query Test' })).toBeInTheDocument()
     expect(screen.queryByLabelText('Primary workflow')).not.toBeInTheDocument()
@@ -285,6 +401,244 @@ describe('App', () => {
 
     const analyzeBody = JSON.parse(fetch.mock.calls[0][1].body)
     expect(analyzeBody.sourceSignals.llmsTxt.present).toBe(true)
+  })
+
+  it('shows the agentic panel after baseline analysis and generates artifacts', async () => {
+    fetch
+      .mockResolvedValueOnce(createJsonResponse(baselinePayload))
+      .mockResolvedValueOnce(createJsonResponse(agenticPayload))
+      .mockResolvedValueOnce(createJsonResponse(agenticProfilesPayload))
+      .mockResolvedValueOnce(createJsonResponse({ approvals: [] }))
+
+    render(<App />)
+
+    fireEvent.change(screen.getByPlaceholderText('https://example.com/page-to-analyze'), {
+      target: { value: 'https://example.com/article' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Fetch Page' }))
+
+    await act(async () => {
+      MockEventSource.instances[0].emit('complete', {
+        markdown: '# Example\n\nExample helps teams prepare content for AI systems.',
+        charCount: 60,
+        normalizedUrl: 'https://example.com/article',
+        sourceSignals: {
+          sourceUrl: 'https://example.com/article',
+          origin: 'https://example.com',
+          llmsTxt: { present: false, url: null },
+          llmsFullTxt: { present: false, url: null },
+        },
+      })
+    })
+
+    await screen.findByText('Generate the AI-readable infrastructure layer')
+    expect(screen.getByText('Baseline Readiness')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Generate Agentic AI Readiness Layer' }))
+
+    await screen.findByRole('tab', { name: 'llms.txt' })
+    expect(fetch.mock.calls[1][0]).toBe('/agentic/generate')
+    const requestBody = JSON.parse(fetch.mock.calls[1][1].body)
+    expect(requestBody).toMatchObject({
+      url: 'https://example.com/article',
+      markdown: '# Example\n\nExample helps teams prepare content for AI systems.',
+      analysis: expect.objectContaining({ overallScore: 65 }),
+      sourceSignals: expect.objectContaining({ origin: 'https://example.com' }),
+    })
+
+    fireEvent.click(screen.getByRole('tab', { name: 'llms.txt' }))
+    expect(screen.getByText(/# Example/)).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Hosted links' }))
+    expect(screen.getByText('http://localhost:3001/agent/example-com.json')).toBeInTheDocument()
+    expect(await screen.findByTestId('agentic-monitoring-panel')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Rescan stored source URL' })).toBeInTheDocument()
+  })
+
+  it('renders rescan no-op result inside the agentic panel', async () => {
+    fetch
+      .mockResolvedValueOnce(createJsonResponse(baselinePayload))
+      .mockResolvedValueOnce(createJsonResponse(agenticPayload))
+      .mockResolvedValueOnce(createJsonResponse(agenticProfilesPayload))
+      .mockResolvedValueOnce(createJsonResponse({ approvals: [] }))
+      .mockResolvedValueOnce(createJsonResponse({
+        status: 'no_changes',
+        changed: false,
+        slug: 'example-com',
+        changes: [],
+        affectedArtifacts: [],
+        validation: { ok: true },
+        monitoring: {
+          lastScannedAt: '2026-04-28T08:00:00.000Z',
+          lastRescanStatus: 'no_changes',
+          lastRescanSummary: 'Rescan completed with no profile changes detected.',
+        },
+      }))
+      .mockResolvedValueOnce(createJsonResponse(agenticProfilesPayload))
+      .mockResolvedValueOnce(createJsonResponse({ approvals: [] }))
+
+    render(<App />)
+
+    fireEvent.change(screen.getByPlaceholderText('https://example.com/page-to-analyze'), {
+      target: { value: 'https://example.com/article' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Fetch Page' }))
+
+    await act(async () => {
+      MockEventSource.instances[0].emit('complete', {
+        markdown: '# Example\n\nExample helps teams prepare content for AI systems.',
+        charCount: 60,
+        normalizedUrl: 'https://example.com/article',
+        sourceSignals: {
+          sourceUrl: 'https://example.com/article',
+          origin: 'https://example.com',
+          llmsTxt: { present: false, url: null },
+          llmsFullTxt: { present: false, url: null },
+        },
+      })
+    })
+
+    await screen.findByText('Generate the AI-readable infrastructure layer')
+    fireEvent.click(screen.getByRole('button', { name: 'Generate Agentic AI Readiness Layer' }))
+    await screen.findByTestId('agentic-monitoring-panel')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Rescan stored source URL' }))
+
+    expect(await screen.findByText('Rescan result')).toBeInTheDocument()
+    expect(screen.getAllByText('no changes').length).toBeGreaterThan(0)
+    expect(screen.getByText('No changes detected.')).toBeInTheDocument()
+    expect(fetch.mock.calls.some(call => call[0] === '/agentic/rescan/example-com')).toBe(true)
+  })
+
+  it('renders pending approvals with old and new values', async () => {
+    fetch
+      .mockResolvedValueOnce(createJsonResponse(baselinePayload))
+      .mockResolvedValueOnce(createJsonResponse(agenticPayload))
+      .mockResolvedValueOnce(createJsonResponse(agenticProfilesPayload))
+      .mockResolvedValueOnce(createJsonResponse({ approvals: [pendingApproval] }))
+
+    render(<App />)
+
+    fireEvent.change(screen.getByPlaceholderText('https://example.com/page-to-analyze'), {
+      target: { value: 'https://example.com/article' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Fetch Page' }))
+
+    await act(async () => {
+      MockEventSource.instances[0].emit('complete', {
+        markdown: '# Example\n\nExample helps teams prepare content for AI systems.',
+        charCount: 60,
+        normalizedUrl: 'https://example.com/article',
+        sourceSignals: {
+          sourceUrl: 'https://example.com/article',
+          origin: 'https://example.com',
+        },
+      })
+    })
+
+    await screen.findByText('Generate the AI-readable infrastructure layer')
+    fireEvent.click(screen.getByRole('button', { name: 'Generate Agentic AI Readiness Layer' }))
+
+    expect(await screen.findByText('Pending approvals')).toBeInTheDocument()
+    expect(screen.getByText('pricing changed')).toBeInTheDocument()
+    expect(screen.getByText('Pricing starts at $8,000 per month.')).toBeInTheDocument()
+    expect(screen.getByText('Pricing starts at $12,000 per month.')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Approve' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Reject' })).toBeInTheDocument()
+  })
+
+  it('approve and reject actions call the approval backend helpers', async () => {
+    fetch
+      .mockResolvedValueOnce(createJsonResponse(baselinePayload))
+      .mockResolvedValueOnce(createJsonResponse(agenticPayload))
+      .mockResolvedValueOnce(createJsonResponse(agenticProfilesPayload))
+      .mockResolvedValueOnce(createJsonResponse({ approvals: [pendingApproval, pendingApprovalTwo] }))
+      .mockResolvedValueOnce(createJsonResponse({
+        approval: { ...pendingApproval, status: 'approved', reviewedAt: '2026-04-28T08:05:00.000Z' },
+        publishedProfile: {
+          profile: {
+            ...agenticPayload.canonicalProfile,
+            metadata: { updatedAt: '2026-04-28T08:05:00.000Z' },
+          },
+          artifacts: agenticPayload.artifacts,
+          validation: agenticPayload.validation,
+          engineReadiness: agenticPayload.engineReadiness,
+          hostedProfile: agenticPayload.hostedProfile,
+        },
+      }))
+      .mockResolvedValueOnce(createJsonResponse(agenticProfilesPayload))
+      .mockResolvedValueOnce(createJsonResponse({ approvals: [pendingApprovalTwo] }))
+      .mockResolvedValueOnce(createJsonResponse({
+        approval: { ...pendingApprovalTwo, status: 'rejected', reviewedAt: '2026-04-28T08:06:00.000Z' },
+        publishedProfile: null,
+      }))
+      .mockResolvedValueOnce(createJsonResponse(agenticProfilesPayload))
+      .mockResolvedValueOnce(createJsonResponse({ approvals: [] }))
+
+    render(<App />)
+
+    fireEvent.change(screen.getByPlaceholderText('https://example.com/page-to-analyze'), {
+      target: { value: 'https://example.com/article' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Fetch Page' }))
+
+    await act(async () => {
+      MockEventSource.instances[0].emit('complete', {
+        markdown: '# Example\n\nExample helps teams prepare content for AI systems.',
+        charCount: 60,
+        normalizedUrl: 'https://example.com/article',
+        sourceSignals: {
+          sourceUrl: 'https://example.com/article',
+          origin: 'https://example.com',
+        },
+      })
+    })
+
+    await screen.findByText('Generate the AI-readable infrastructure layer')
+    fireEvent.click(screen.getByRole('button', { name: 'Generate Agentic AI Readiness Layer' }))
+
+    await screen.findByText('pricing changed')
+    fireEvent.click(screen.getAllByRole('button', { name: 'Approve' })[0])
+
+    await waitFor(() => {
+      expect(fetch.mock.calls.some(call => call[0] === '/agentic/approvals/apr-example-pricing/approve')).toBe(true)
+    })
+
+    await screen.findByText('policy changed')
+    fireEvent.click(screen.getByRole('button', { name: 'Reject' }))
+
+    await waitFor(() => {
+      expect(fetch.mock.calls.some(call => call[0] === '/agentic/approvals/apr-example-policy/reject')).toBe(true)
+    })
+    expect(screen.getByRole('tab', { name: 'llms.txt' })).toBeInTheDocument()
+  })
+
+  it('keeps agentic generation errors inside the panel', async () => {
+    fetch
+      .mockResolvedValueOnce(createJsonResponse(baselinePayload))
+      .mockResolvedValueOnce(createJsonResponse({ error: 'Agentic layer is disabled' }, 503))
+
+    render(<App />)
+
+    fireEvent.change(screen.getByPlaceholderText('https://example.com/page-to-analyze'), {
+      target: { value: 'https://example.com/article' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Fetch Page' }))
+
+    await act(async () => {
+      MockEventSource.instances[0].emit('complete', {
+        markdown: '# Example\n\nExample helps teams prepare content for AI systems.',
+        charCount: 60,
+        normalizedUrl: 'https://example.com/article',
+        sourceSignals: {},
+      })
+    })
+
+    await screen.findByText('Generate the AI-readable infrastructure layer')
+    fireEvent.click(screen.getByRole('button', { name: 'Generate Agentic AI Readiness Layer' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Agentic generation failed: Agentic layer is disabled')
+    expect(screen.getByText('Baseline Readiness')).toBeInTheDocument()
   })
 
   it('shows the baseline analysis error instead of an empty score panel when analyze fails', async () => {
