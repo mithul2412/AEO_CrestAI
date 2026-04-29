@@ -681,7 +681,6 @@ export default function App() {
             </div>
           )}
 
-          {activeMode === 'score' && hasBaseline && !hasQueryResults && (
           {activeMode === 'score' && hasBaseline && (
             <AgenticReadinessPanel
               url={url}

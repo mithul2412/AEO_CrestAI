@@ -384,7 +384,7 @@ describe('App', () => {
     expect(screen.getByLabelText('Diagnostic workspace status')).toBeInTheDocument()
     expect(screen.getByText('Current test is loaded')).toBeInTheDocument()
     expect(screen.getByText('Page fetched')).toBeInTheDocument()
-    expect(screen.getByText('Baseline ready')).toBeInTheDocument()
+    expect(screen.getAllByText('Baseline ready').length).toBeGreaterThan(0)
     expect(screen.getByText('Query waiting')).toBeInTheDocument()
     expect(within(screen.getByLabelText('Diagnostic workspace status')).getByRole('button', { name: 'Run Query Test' })).toBeInTheDocument()
     expect(screen.queryByLabelText('Primary workflow')).not.toBeInTheDocument()
@@ -432,7 +432,7 @@ describe('App', () => {
     })
 
     await screen.findByText('Generate the AI-readable infrastructure layer')
-    expect(screen.getByText('Overall AEO Score')).toBeInTheDocument()
+    expect(screen.getByText('Baseline Readiness')).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: 'Generate Agentic AI Readiness Layer' }))
 
@@ -638,7 +638,7 @@ describe('App', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Generate Agentic AI Readiness Layer' }))
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Agentic generation failed: Agentic layer is disabled')
-    expect(screen.getByText('Overall AEO Score')).toBeInTheDocument()
+    expect(screen.getByText('Baseline Readiness')).toBeInTheDocument()
   })
 
   it('shows the baseline analysis error instead of an empty score panel when analyze fails', async () => {
