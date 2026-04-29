@@ -21,6 +21,7 @@ export function buildProfileRecord(input = {}, existing = null) {
     engineReadiness: input.engineReadiness || null,
     hostedProfile: input.hostedProfile || null,
     changeEvents: input.changeEvents || [],
+    approval: input.approval || null,
     createdAt,
     updatedAt: timestamp,
     storedAt: timestamp,
@@ -51,6 +52,7 @@ function buildVersionSnapshot(record) {
     engineReadiness: record.engineReadiness,
     hostedProfile: record.hostedProfile,
     changeEvents: record.changeEvents || [],
+    approval: record.approval || null,
   }
 }
 
@@ -69,6 +71,7 @@ function getExistingVersionHistory(existing) {
     engineReadiness: existing.engineReadiness || null,
     hostedProfile: existing.hostedProfile || null,
     changeEvents: existing.changeEvents || [],
+    approval: existing.approval || null,
     createdAt: existing.createdAt || existing.storedAt || '',
     updatedAt: existing.updatedAt || existing.storedAt || '',
     storedAt: existing.storedAt || existing.updatedAt || '',

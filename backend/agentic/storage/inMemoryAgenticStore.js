@@ -1,7 +1,13 @@
 import { buildProfileRecord, summarizeProfileRecord } from './profileRecord.js'
+import {
+  buildApprovalRequest,
+  summarizeApprovalRequest,
+  updateApprovalRequestStatus as applyApprovalRequestStatus,
+} from './approvalRequest.js'
 
 export function createInMemoryAgenticStore() {
   const profilesBySlug = new Map()
+  const approvalsById = new Map()
 
   return {
     type: 'memory',
@@ -23,6 +29,43 @@ export function createInMemoryAgenticStore() {
 
     clearProfiles() {
       profilesBySlug.clear()
+    },
+
+    createApprovalRequest(input) {
+      const approval = buildApprovalRequest(input)
+      approvalsById.set(approval.id, approval)
+      return approval
+    },
+
+    getApprovalRequest(id) {
+      return approvalsById.get(id) || null
+    },
+
+    listApprovalRequests(filters = {}) {
+      return [...approvalsById.values()]
+        .filter(approval => !filters.status || approval.status === filters.status)
+        .map(summarizeApprovalRequest)
+        .sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)))
+    },
+
+    updateApprovalRequest(id, updates = {}) {
+      const existing = approvalsById.get(id)
+      if (!existing) return null
+      const approval = buildApprovalRequest({ ...existing, ...updates }, existing)
+      approvalsById.set(id, approval)
+      return approval
+    },
+
+    updateApprovalRequestStatus(id, status, options = {}) {
+      const existing = approvalsById.get(id)
+      if (!existing) return null
+      const approval = applyApprovalRequestStatus(existing, status, options)
+      approvalsById.set(id, approval)
+      return approval
+    },
+
+    clearApprovalRequests() {
+      approvalsById.clear()
     },
 
     getStorageInfo() {
@@ -50,4 +93,28 @@ export function listProfiles() {
 
 export function clearProfiles() {
   return defaultStore.clearProfiles()
+}
+
+export function createApprovalRequest(input) {
+  return defaultStore.createApprovalRequest(input)
+}
+
+export function getApprovalRequest(id) {
+  return defaultStore.getApprovalRequest(id)
+}
+
+export function listApprovalRequests(filters) {
+  return defaultStore.listApprovalRequests(filters)
+}
+
+export function updateApprovalRequest(id, updates) {
+  return defaultStore.updateApprovalRequest(id, updates)
+}
+
+export function updateApprovalRequestStatus(id, status, options) {
+  return defaultStore.updateApprovalRequestStatus(id, status, options)
+}
+
+export function clearApprovalRequests() {
+  return defaultStore.clearApprovalRequests()
 }

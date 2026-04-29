@@ -3,6 +3,12 @@ import { compileArtifacts } from '../services/artifactCompiler.js'
 import { validateArtifacts } from '../services/artifactValidator.js'
 import { computeEngineReadiness } from '../services/engineReadinessService.js'
 import { extractCanonicalProfile } from '../services/profileExtractor.js'
+import {
+  approveApprovalRequest,
+  getApprovalRequestById,
+  listApprovalRequests as listApprovalWorkflowRequests,
+  rejectApprovalRequest,
+} from '../services/approvalWorkflowService.js'
 import { getHostedProfileUrl } from '../generators/alternateLinkGenerator.js'
 import { getStorageInfo, listProfiles, saveProfile } from '../storage/agenticStore.js'
 
@@ -130,6 +136,46 @@ router.get('/profiles', (req, res) => {
     profiles: listProfiles(),
     storage: getStorageInfo(),
   })
+})
+
+router.get('/approvals', (req, res) => {
+  res.json({
+    approvals: listApprovalWorkflowRequests({
+      status: req.query?.status,
+    }),
+  })
+})
+
+router.get('/approvals/:id', (req, res) => {
+  const approval = getApprovalRequestById(req.params.id)
+  if (!approval) {
+    return res.status(404).json({ error: 'Approval request not found' })
+  }
+  return res.json({ approval })
+})
+
+router.post('/approvals/:id/approve', (req, res) => {
+  try {
+    const result = approveApprovalRequest(req.params.id, {
+      reviewerNote: req.body?.reviewerNote || req.body?.note || '',
+      reviewedBy: req.body?.reviewedBy || req.body?.reviewer || '',
+    })
+    return res.json(result)
+  } catch (err) {
+    return res.status(err.status || 500).json({ error: err.message || 'Approval failed' })
+  }
+})
+
+router.post('/approvals/:id/reject', (req, res) => {
+  try {
+    const result = rejectApprovalRequest(req.params.id, {
+      reviewerNote: req.body?.reviewerNote || req.body?.note || '',
+      reviewedBy: req.body?.reviewedBy || req.body?.reviewer || '',
+    })
+    return res.json(result)
+  } catch (err) {
+    return res.status(err.status || 500).json({ error: err.message || 'Rejection failed' })
+  }
 })
 
 export default router
