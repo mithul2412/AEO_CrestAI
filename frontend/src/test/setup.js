@@ -32,3 +32,16 @@ Object.defineProperty(navigator, 'clipboard', {
     writeText: vi.fn(),
   },
 })
+
+if (!window.localStorage || typeof window.localStorage.clear !== 'function') {
+  const store = new Map()
+  Object.defineProperty(window, 'localStorage', {
+    configurable: true,
+    value: {
+      getItem: vi.fn(key => store.get(key) || null),
+      setItem: vi.fn((key, value) => store.set(key, String(value))),
+      removeItem: vi.fn(key => store.delete(key)),
+      clear: vi.fn(() => store.clear()),
+    },
+  })
+}

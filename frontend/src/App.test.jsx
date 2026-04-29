@@ -213,6 +213,50 @@ const queryIntelligencePayload = {
   },
 }
 
+const agenticPayload = {
+  profileId: 'profile-example-com',
+  slug: 'example-com',
+  canonicalProfile: {
+    business: {
+      name: 'Example',
+      domain: 'example.com',
+      description: 'Example helps teams prepare content for AI systems.',
+    },
+  },
+  artifacts: {
+    llmsTxt: '# Example\n\n## AI-readable profile\n- http://localhost:3001/agent/example-com',
+    llmsFullTxt: '# Example AI-readable Profile\n\nSource URL: https://example.com/article',
+    jsonLd: [{ '@context': 'https://schema.org', '@type': 'Organization', name: 'Example' }],
+    faqBlock: [{ question: 'What is Example?', answer: 'Example prepares content.', sourceUrl: 'https://example.com/article' }],
+    actionMetadata: [{ id: 'action-contact', type: 'contact', label: 'Contact', url: 'https://example.com/contact', status: 'active' }],
+    claimSourceMap: [{ claim: 'Example prepares content.', sourceUrl: 'https://example.com/article', sourceText: 'Example prepares content.' }],
+    structuredServiceProductData: [{ id: 'service-example', type: 'service', name: 'AI content readiness' }],
+    robotsRecommendations: [{ engine: 'ChatGPT', userAgents: ['OAI-SearchBot'], recommendation: 'Allow when policy permits.' }],
+    alternateLinkSnippet: '<link rel="alternate" type="application/json" href="http://localhost:3001/agent/example-com.json" title="AI-readable business profile" />',
+  },
+  hostedProfile: {
+    htmlUrl: 'http://localhost:3001/agent/example-com',
+    jsonUrl: 'http://localhost:3001/agent/example-com.json',
+    markdownUrl: 'http://localhost:3001/agent/example-com.md',
+  },
+  validation: {
+    ok: true,
+    approvalRequired: false,
+    warnings: [],
+    errors: [],
+    checks: [
+      { id: 'jsonld-array', label: 'JSON-LD is an array', status: 'pass', message: 'jsonLd is an array' },
+    ],
+  },
+  engineReadiness: {
+    chatgpt: { score: 86, checks: [{ id: 'jsonld', label: 'JSON-LD exists', passed: true }] },
+    perplexity: { score: 82, checks: [] },
+    google: { score: 84, checks: [] },
+    claude: { score: 80, checks: [] },
+  },
+  warnings: [],
+}
+
 describe('App', () => {
   beforeEach(() => {
     MockEventSource.instances = []
@@ -285,6 +329,82 @@ describe('App', () => {
 
     const analyzeBody = JSON.parse(fetch.mock.calls[0][1].body)
     expect(analyzeBody.sourceSignals.llmsTxt.present).toBe(true)
+  })
+
+  it('shows the agentic panel after baseline analysis and generates artifacts', async () => {
+    fetch
+      .mockResolvedValueOnce(createJsonResponse(baselinePayload))
+      .mockResolvedValueOnce(createJsonResponse(agenticPayload))
+
+    render(<App />)
+
+    fireEvent.change(screen.getByPlaceholderText('https://example.com/page-to-analyze'), {
+      target: { value: 'https://example.com/article' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Fetch Page' }))
+
+    await act(async () => {
+      MockEventSource.instances[0].emit('complete', {
+        markdown: '# Example\n\nExample helps teams prepare content for AI systems.',
+        charCount: 60,
+        normalizedUrl: 'https://example.com/article',
+        sourceSignals: {
+          sourceUrl: 'https://example.com/article',
+          origin: 'https://example.com',
+          llmsTxt: { present: false, url: null },
+          llmsFullTxt: { present: false, url: null },
+        },
+      })
+    })
+
+    await screen.findByText('Generate the AI-readable infrastructure layer')
+    expect(screen.getByText('Overall AEO Score')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Generate Agentic AI Readiness Layer' }))
+
+    await screen.findByRole('tab', { name: 'llms.txt' })
+    expect(fetch.mock.calls[1][0]).toBe('/agentic/generate')
+    const requestBody = JSON.parse(fetch.mock.calls[1][1].body)
+    expect(requestBody).toMatchObject({
+      url: 'https://example.com/article',
+      markdown: '# Example\n\nExample helps teams prepare content for AI systems.',
+      analysis: expect.objectContaining({ overallScore: 65 }),
+      sourceSignals: expect.objectContaining({ origin: 'https://example.com' }),
+    })
+
+    fireEvent.click(screen.getByRole('tab', { name: 'llms.txt' }))
+    expect(screen.getByText(/# Example/)).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Hosted links' }))
+    expect(screen.getByText('http://localhost:3001/agent/example-com.json')).toBeInTheDocument()
+  })
+
+  it('keeps agentic generation errors inside the panel', async () => {
+    fetch
+      .mockResolvedValueOnce(createJsonResponse(baselinePayload))
+      .mockResolvedValueOnce(createJsonResponse({ error: 'Agentic layer is disabled' }, 503))
+
+    render(<App />)
+
+    fireEvent.change(screen.getByPlaceholderText('https://example.com/page-to-analyze'), {
+      target: { value: 'https://example.com/article' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Fetch Page' }))
+
+    await act(async () => {
+      MockEventSource.instances[0].emit('complete', {
+        markdown: '# Example\n\nExample helps teams prepare content for AI systems.',
+        charCount: 60,
+        normalizedUrl: 'https://example.com/article',
+        sourceSignals: {},
+      })
+    })
+
+    await screen.findByText('Generate the AI-readable infrastructure layer')
+    fireEvent.click(screen.getByRole('button', { name: 'Generate Agentic AI Readiness Layer' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Agentic generation failed: Agentic layer is disabled')
+    expect(screen.getByText('Overall AEO Score')).toBeInTheDocument()
   })
 
   it('shows the baseline analysis error instead of an empty score panel when analyze fails', async () => {
