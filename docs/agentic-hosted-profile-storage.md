@@ -45,7 +45,25 @@ Each record persists:
 - `createdAt`
 - `updatedAt`
 - current record `version`
+- `versionHistory` snapshots for each stored version
 
-The generated JSON files are intentionally ignored by git. This storage mode is intended for local development and single-process deployments only; it is not a production database, does not coordinate concurrent writers, and does not yet provide version history. Version history and approval-aware publishing are planned for the next stage.
+The generated JSON files are intentionally ignored by git. This storage mode is intended for local development and single-process deployments only; it is not a production database and does not coordinate concurrent writers. Approval-aware publishing is planned for the next stage.
 
 Tests can instantiate the file store with a temporary directory to prove profiles survive store re-instantiation without writing outside the repo during normal runtime.
+
+## Version History
+
+Every save increments the profile record's current `version` and appends a `versionHistory` entry. The top-level fields continue to represent the latest published profile so existing hosted routes do not need to change.
+
+Each history entry stores:
+
+- version number
+- profile ID and business name summary
+- source URL
+- timestamps
+- canonical profile snapshot
+- artifacts snapshot
+- validation result
+- engine-readiness readout
+- hosted profile metadata
+- change events, when supplied by a rescan or future approval workflow
