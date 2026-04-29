@@ -90,6 +90,22 @@ export function createFileAgenticStore(options = {}) {
       }
     },
 
+    updateProfileMonitoring(slug, monitoring) {
+      ensureDirectory(dataDir)
+      const filePath = recordPath(dataDir, slug)
+      const existing = readRecord(filePath)
+      if (!existing) return null
+      const record = {
+        ...existing,
+        monitoring: {
+          ...(existing.monitoring || {}),
+          ...(monitoring || {}),
+        },
+      }
+      writeRecord(filePath, record)
+      return record
+    },
+
     createApprovalRequest(input) {
       ensureDirectory(approvalsDir(dataDir))
       const approval = buildApprovalRequest(input)

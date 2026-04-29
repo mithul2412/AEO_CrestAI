@@ -144,6 +144,28 @@ async function inspectPageIntelligence(normalizedUrl, markdown, crawlPromise, re
   }
 }
 
+export async function fetchPageMarkdown(rawUrl, options = {}) {
+  const requestId = options.requestId || nextFetchRequestId()
+  const normalizedUrl = normalizeFetchUrl(rawUrl)
+  const crawlPromise = crawlPage(normalizedUrl)
+  const [sourceSignals, { markdown, charCount }] = await Promise.all([
+    buildSourceSignals(normalizedUrl, requestId),
+    fetchMarkdownWithJina(normalizedUrl, {
+      signal: options.signal || AbortSignal.timeout(FETCH_TIMEOUT_MS),
+      onChunk: options.onChunk || undefined,
+    }),
+  ])
+  const intelligence = await inspectPageIntelligence(normalizedUrl, markdown, crawlPromise, requestId)
+
+  return {
+    markdown,
+    charCount,
+    sourceSignals,
+    normalizedUrl,
+    intelligence,
+  }
+}
+
 router.get('/', async (req, res) => {
   const requestId = nextFetchRequestId()
   const streamMode = isStreamRequest(req)
@@ -217,14 +239,9 @@ router.get('/', async (req, res) => {
   }
 
   try {
-    const crawlPromise = crawlPage(normalizedUrl)
-    const [sourceSignals, { markdown, charCount }] = await Promise.all([
-      buildSourceSignals(normalizedUrl, requestId),
-      fetchMarkdownWithJina(normalizedUrl, {
-        signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
-      }),
-    ])
-    const intelligence = await inspectPageIntelligence(normalizedUrl, markdown, crawlPromise, requestId)
+    const { markdown, charCount, sourceSignals, intelligence } = await fetchPageMarkdown(normalizedUrl, {
+      requestId,
+    })
 
     logFetch(requestId, `JSON fetch completed charCount=${charCount}`)
     res.json({ markdown, charCount, sourceSignals, normalizedUrl, intelligence })

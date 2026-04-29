@@ -31,6 +31,20 @@ export function createInMemoryAgenticStore() {
       profilesBySlug.clear()
     },
 
+    updateProfileMonitoring(slug, monitoring) {
+      const existing = profilesBySlug.get(slug)
+      if (!existing) return null
+      const record = {
+        ...existing,
+        monitoring: {
+          ...(existing.monitoring || {}),
+          ...(monitoring || {}),
+        },
+      }
+      profilesBySlug.set(slug, record)
+      return record
+    },
+
     createApprovalRequest(input) {
       const approval = buildApprovalRequest(input)
       approvalsById.set(approval.id, approval)
@@ -93,6 +107,10 @@ export function listProfiles() {
 
 export function clearProfiles() {
   return defaultStore.clearProfiles()
+}
+
+export function updateProfileMonitoring(slug, monitoring) {
+  return defaultStore.updateProfileMonitoring(slug, monitoring)
 }
 
 export function createApprovalRequest(input) {

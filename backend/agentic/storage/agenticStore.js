@@ -40,6 +40,10 @@ export function clearProfiles() {
   return getAgenticStore().clearProfiles()
 }
 
+export function updateProfileMonitoring(slug, monitoring) {
+  return getAgenticStore().updateProfileMonitoring(slug, monitoring)
+}
+
 export function getStorageInfo() {
   return getAgenticStore().getStorageInfo()
 }
