@@ -28,6 +28,12 @@ export function buildHostedProfileJson(record) {
     },
     validation: record.validation,
     engineReadiness: record.engineReadiness,
+    hostedProfile: record.hostedProfile,
+    storage: {
+      createdAt: record.createdAt,
+      updatedAt: record.updatedAt,
+      version: record.version,
+    },
     generatedAt: record.storedAt,
   }
 }

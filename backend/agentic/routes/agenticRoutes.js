@@ -4,7 +4,7 @@ import { validateArtifacts } from '../services/artifactValidator.js'
 import { computeEngineReadiness } from '../services/engineReadinessService.js'
 import { extractCanonicalProfile } from '../services/profileExtractor.js'
 import { getHostedProfileUrl } from '../generators/alternateLinkGenerator.js'
-import { listProfiles, saveProfile } from '../storage/inMemoryAgenticStore.js'
+import { getStorageInfo, listProfiles, saveProfile } from '../storage/agenticStore.js'
 
 const router = Router()
 
@@ -76,12 +76,15 @@ router.post('/generate', (req, res) => {
       ...(validation.warnings || []),
     ])]
 
+    const hostedProfile = hostedUrls(canonicalProfile)
+
     saveProfile({
       slug: canonicalProfile.slug,
       profile: canonicalProfile,
       artifacts,
       validation,
       engineReadiness,
+      hostedProfile,
     })
 
     res.json({
@@ -89,7 +92,7 @@ router.post('/generate', (req, res) => {
       slug: canonicalProfile.slug,
       canonicalProfile,
       artifacts,
-      hostedProfile: hostedUrls(canonicalProfile),
+      hostedProfile,
       validation,
       engineReadiness,
       warnings: canonicalProfile.metadata.warnings,
@@ -125,10 +128,7 @@ router.post('/validate', (req, res) => {
 router.get('/profiles', (req, res) => {
   res.json({
     profiles: listProfiles(),
-    storage: {
-      type: 'memory',
-      warning: 'In-memory hosted profiles disappear when the backend process restarts.',
-    },
+    storage: getStorageInfo(),
   })
 })
 
