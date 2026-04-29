@@ -33,6 +33,13 @@ export function buildHostedProfileJson(record) {
       createdAt: record.createdAt,
       updatedAt: record.updatedAt,
       version: record.version,
+      versionHistory: (record.versionHistory || []).map(item => ({
+        version: item.version,
+        createdAt: item.createdAt,
+        updatedAt: item.updatedAt,
+        storedAt: item.storedAt,
+        changeEvents: item.changeEvents || [],
+      })),
     },
     generatedAt: record.storedAt,
   }
