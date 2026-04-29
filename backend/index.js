@@ -4,6 +4,8 @@ import cors from 'cors'
 import fetchRoute from './routes/fetch.js'
 import analyzeRoute from './routes/analyze.js'
 import chatRoute from './routes/chat.js'
+import agenticRoutes from './agentic/routes/agenticRoutes.js'
+import hostedProfileRoutes from './agentic/routes/hostedProfileRoutes.js'
 
 const app = express()
 const PORT = process.env.PORT || 3001
@@ -14,6 +16,8 @@ app.use(express.json({ limit: '10mb' }))
 app.use('/fetch', fetchRoute)
 app.use('/analyze', analyzeRoute)
 app.use('/chat', chatRoute)
+app.use('/agentic', agenticRoutes)
+app.use('/agent', hostedProfileRoutes)
 
 app.get('/health', (req, res) => res.json({ ok: true }))
 
