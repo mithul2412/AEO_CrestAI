@@ -2,7 +2,14 @@
 import express from 'express'
 import { computeGeoScore } from '../utils/geoScorer.js'
 import { computeGeuScore } from '../utils/geuScorer.js'
-import analyzeRoute, { FAILURE_MODES, normalizeQueryPayload } from '../routes/analyze.js'
+import analyzeRoute, {
+  FAILURE_MODES,
+  fallbackQuerySuggestions,
+  dynamicFixFromVerdicts,
+  normalizeDynamicFixPayload,
+  normalizeQueryPayload,
+  normalizeQuerySuggestionsPayload,
+} from '../routes/analyze.js'
 
 const app = express()
 app.use(express.json())
@@ -264,6 +271,107 @@ test('query payload normalizer falls back for invalid failureMode', () => {
   })
 
   expect(payload.failureMode).toBe('Answer Failure')
+})
+
+test('query suggestion normalizer returns three clean questions', () => {
+  const payload = normalizeQuerySuggestionsPayload('Qwen 3.6 Plus', {
+    queries: [
+      'What is Test pricing',
+      'How does Test compare to competitors?',
+      'How does Test compare to competitors?',
+      'What are the main Test plans?',
+    ],
+  }, ['Fallback one?', 'Fallback two?', 'Fallback three?'])
+
+  expect(payload.queries).toEqual([
+    'What is Test pricing?',
+    'How does Test compare to competitors?',
+    'What are the main Test plans?',
+  ])
+})
+
+test('query suggestion normalizer falls back when model returns too few queries', () => {
+  const fallback = ['Fallback one?', 'Fallback two?', 'Fallback three?']
+  const payload = normalizeQuerySuggestionsPayload('Qwen 3.6 Plus', {
+    queries: ['Only one query?'],
+  }, fallback)
+
+  expect(payload.queries).toBe(fallback)
+})
+
+test('fallback query suggestions are derived from page identity', () => {
+  const suggestions = fallbackQuerySuggestions({
+    sourceUrl: 'https://developer.example.com/pricing',
+    pageIntelligence: { extraction: { title: 'Developer Pricing | Example' } },
+  })
+
+  expect(suggestions).toHaveLength(3)
+  expect(suggestions[0]).toMatch(/Developer/i)
+})
+
+test('dynamic fix normalizer preserves model-specific recommendation', () => {
+  const fallback = {
+    failureMode: 'Retrieval Failure',
+    fix: 'Fallback fix',
+    whereToEdit: 'Opening',
+    why: 'Fallback reason',
+    exampleCopy: 'Fallback copy',
+    expectedLift: { retrievalScore: '+5', answerScore: '+4', evidenceScore: '+0' },
+    confidence: 'medium',
+  }
+  const payload = normalizeDynamicFixPayload('Qwen 3.6 Plus', {
+    failureMode: 'Evidence Failure',
+    fix: 'Add a sourced answer sentence that names the target query.',
+    whereToEdit: 'First pricing section',
+    why: 'The page needs proof attached to the exact answer.',
+    exampleCopy: 'Developer pricing starts at $X and includes Y, according to Z.',
+    expectedLift: { retrievalScore: '+8', answerScore: '+10', evidenceScore: '+12' },
+    confidence: 'high',
+  }, fallback)
+
+  expect(payload.fix).toMatch(/sourced answer/i)
+  expect(payload.failureMode).toBe('Evidence Failure')
+  expect(payload.fallback).toBe(false)
+  expect(payload.model).toBe('Qwen 3.6 Plus')
+})
+
+test('dynamic fix normalizer falls back when required fields are missing', () => {
+  const fallback = {
+    failureMode: 'Retrieval Failure',
+    fix: 'Fallback fix',
+    whereToEdit: 'Opening',
+    why: 'Fallback reason',
+    expectedLift: { retrievalScore: '+5', answerScore: '+4', evidenceScore: '+0' },
+    confidence: 'medium',
+  }
+  const payload = normalizeDynamicFixPayload('Qwen 3.6 Plus', {
+    fix: '',
+  }, fallback)
+
+  expect(payload.fix).toBe('Fallback fix')
+  expect(payload.fallback).toBe(true)
+})
+
+test('dynamic fix can be derived from model verdicts before static fallback', () => {
+  const fallback = {
+    failureMode: 'Retrieval Failure',
+    fix: 'Static fallback fix',
+    whereToEdit: 'Opening',
+    why: 'Static fallback reason',
+    expectedLift: { retrievalScore: '+5', answerScore: '+4', evidenceScore: '+0' },
+    confidence: 'medium',
+  }
+  const fix = dynamicFixFromVerdicts([{
+    model: 'Nemotron 120B',
+    failureMode: 'Answer Failure',
+    suggestedFix: 'Add a direct answer sentence for the exact query.',
+    topGap: 'The answer is implied but not stated.',
+  }], fallback)
+
+  expect(fix.fix).toMatch(/direct answer sentence/i)
+  expect(fix.why).toMatch(/implied/i)
+  expect(fix.source).toBe('model-verdict')
+  expect(fix.fallback).toBe(false)
 })
 
 test('same markdown produces same GEU score', () => {
