@@ -627,11 +627,14 @@ export default function Overview() {
                   : hasQueryResults ? 'Re-run query' : 'Run query test'}
               </button>
             </div>
-            {!hasQueryResults && !competitorQueryLoading && competitorQueries?.length > 0 && (
+            {!hasQueryResults && (
               <div className="suggestion-row">
-                {competitorQueries.map(q => (
-                  <button key={q} className="chip" onClick={() => setQuery(q)}>{q}</button>
-                ))}
+                {competitorQueryLoading
+                  ? <span className="chip chip--muted" aria-busy="true">Generating suggestions…</span>
+                  : competitorQueries?.map(q => (
+                      <button key={q} className="chip" onClick={() => setQuery(q)}>{q}</button>
+                    ))
+                }
               </div>
             )}
             {error && <div className="error-bar">{error}</div>}

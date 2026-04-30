@@ -756,6 +756,7 @@ a { color: inherit; text-decoration: none; }
   transition: border-color var(--t-fast), color var(--t-fast);
 }
 .chip:hover:not([disabled]) { border-color: var(--ink); color: var(--ink); }
+.chip--muted { opacity: 0.45; cursor: default; pointer-events: none; }
 
 /* ----- pills (status) --------------------------------------------------- */
 
