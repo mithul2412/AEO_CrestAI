@@ -422,7 +422,12 @@ export default function Overview() {
                   placeholder="e.g. what is the best CRM for small business?"
                   value={query}
                   onChange={e => setQuery(e.target.value)}
-                  onKeyDown={e => e.key === 'Enter' && handleAnalyze()}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault()
+                      if (!queryAnalyzing && query.trim() && hasBaseline) handleAnalyze()
+                    }
+                  }}
                 />
                 <button
                   type="button"
@@ -458,7 +463,12 @@ export default function Overview() {
                 className="query-row__input"
                 value={query}
                 onChange={e => setQuery(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && handleAnalyze()}
+                onKeyDown={e => {
+                if (e.key === 'Enter') {
+                  e.preventDefault()
+                  if (!queryAnalyzing && query.trim()) handleAnalyze()
+                }
+              }}
               />
               <button
                 type="button"

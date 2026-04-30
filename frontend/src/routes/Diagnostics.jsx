@@ -74,7 +74,7 @@ export default function Diagnostics() {
   const competitorPosition = getCompetitorPosition(competitor)
 
   const chunks = intelligence.chunks?.length ? intelligence.chunks : retrieval?.topChunks || []
-  const minimapChunks = useMemo(() => chunks.slice(0, 24), [chunks])
+  const minimapChunks = useMemo(() => (retrieval?.topChunks || []).slice(0, 24), [retrieval])
   const [activeChunkId, setActiveChunkId] = useState(minimapChunks[0]?.chunkId || '')
   const [evidenceOpen, setEvidenceOpen] = useState(false)
 
