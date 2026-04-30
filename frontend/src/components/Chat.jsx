@@ -30,17 +30,14 @@ const STAGE_META = {
   'post-fetch': {
     eyebrow: 'Context loaded',
     title: 'Ask for rewrite help from the current page context.',
-    description: '',
   },
   'post-query': {
     eyebrow: 'Query in focus',
     title: 'Rewrite against the exact question.',
-    description: 'Use the query to tighten the answer-first path.',
   },
   'post-verdict': {
     eyebrow: 'Fix First ready',
     title: 'Turn the weakest section into a rewrite.',
-    description: 'Switch models and compare priorities.',
   }
 }
 
@@ -198,7 +195,23 @@ function mapApiResponses(responses = []) {
   }, {})
 }
 
-export default function Chat({ markdown, stage = 'post-fetch', query = '', draft = '', draftToken = 0 }) {
+function stageLabel(stage) {
+  return {
+    'post-fetch': 'Baseline',
+    'post-query': 'Query Draft',
+    'post-verdict': 'Fix First',
+  }[stage] || 'Workspace'
+}
+
+export default function Chat({
+  markdown,
+  stage = 'post-fetch',
+  query = '',
+  draft = '',
+  draftToken = 0,
+  pageIntelligence = null,
+  fixSource = '',
+}) {
   const [turns, setTurns] = useState([])
   const [input, setInput] = useState('')
   const [sending, setSending] = useState(false)
@@ -255,7 +268,7 @@ export default function Chat({ markdown, stage = 'post-fetch', query = '', draft
       const res = await fetch('/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages: history, markdown, query })
+        body: JSON.stringify({ messages: history, markdown, query, pageIntelligence })
       })
 
       if (!res.ok) {
@@ -278,6 +291,10 @@ export default function Chat({ markdown, stage = 'post-fetch', query = '', draft
   }
 
   const activeModel = MODELS.find(model => model.className === viewModel) || MODELS[0]
+  const hasTurns = turns.length > 0
+  const hasAnyResponse = turns.some(turn =>
+    Object.values(turn.responses || {}).some(response => response?.status === 'ok')
+  )
 
   return (
     <div className="chat-panel">
@@ -286,37 +303,45 @@ export default function Chat({ markdown, stage = 'post-fetch', query = '', draft
           <span className="chat-panel-dot" />
           <div className="chat-panel-title-wrap">
             <span className="chat-panel-title">Rewrite Help</span>
-            <span className="chat-panel-subtitle">{stageMeta.eyebrow}</span>
+            <span className="chat-panel-subtitle">
+              {stageMeta.eyebrow}{query ? ` · ${query.length > 60 ? `${query.slice(0, 57)}…` : query}` : ''}
+            </span>
           </div>
         </div>
-        <div className="chat-panel-header-right">
-          <div className="model-seg-ctrl" role="group" aria-label="Select model">
-            {MODELS.map(model => (
-              <button
-                key={model.id}
-                type="button"
-                className={`model-seg-btn${viewModel === model.className ? ` active ${model.className}` : ''}`}
-                onClick={() => setViewModel(model.className)}
-              >
-                {model.label}
-              </button>
-            ))}
+        {hasAnyResponse && (
+          <div className="chat-panel-header-right">
+            <div className="model-seg-ctrl" role="group" aria-label="Select model">
+              {MODELS.map(model => (
+                <button
+                  key={model.id}
+                  type="button"
+                  className={`model-seg-btn${viewModel === model.className ? ` active ${model.className}` : ''}`}
+                  onClick={() => setViewModel(model.className)}
+                >
+                  {model.label}
+                </button>
+              ))}
+            </div>
           </div>
-          <span className="summary-pill ok">{MODELS.length} models live</span>
-        </div>
+        )}
       </div>
 
-      <div className="chat-panel-intro">
+      <div className="chat-context-strip">
         <div>
-          <div className="chat-panel-intro-title">{stageMeta.title}</div>
-          {stageMeta.description && (
-            <div className="chat-panel-intro-copy">{stageMeta.description}</div>
-          )}
+          <span className="kicker">Query</span>
+          <strong>{query || 'No target query yet'}</strong>
         </div>
-        <span className="chat-panel-model-badge">{activeModel.id} visible</span>
+        <div>
+          <span className="kicker">Stage</span>
+          <strong>{stageLabel(stage)}</strong>
+        </div>
+        <div>
+          <span className="kicker">Fix Source</span>
+          <strong>{fixSource || (draft ? 'Diagnostics draft' : 'Chat prompt')}</strong>
+        </div>
       </div>
 
-      {turns.length === 0 && (
+      {!hasTurns && (
         <div className="chat-panel-chips">
           {chips.map(chip => (
             <button key={chip} className="chat-panel-chip" onClick={() => sendMessage(chip)}>
@@ -326,7 +351,7 @@ export default function Chat({ markdown, stage = 'post-fetch', query = '', draft
         </div>
       )}
 
-      {turns.length > 0 && (
+      {hasTurns && (
         <div className="chat-turns">
           {turns.map(turn => (
             <div key={turn.id} className="chat-turn-card">
@@ -348,17 +373,6 @@ export default function Chat({ markdown, stage = 'post-fetch', query = '', draft
             </div>
           ))}
           <div ref={bottomRef} />
-        </div>
-      )}
-
-      {turns.length > 0 && (
-        <div className="chat-utility-row">
-          <button className="chip" type="button" onClick={() => setShowTemplate(value => !value)}>
-            {showTemplate ? 'Hide template' : 'Template'}
-          </button>
-          <button className="chip" type="button" onClick={() => { setTurns([]); setError('') }}>
-            Clear
-          </button>
         </div>
       )}
 
@@ -385,6 +399,27 @@ export default function Chat({ markdown, stage = 'post-fetch', query = '', draft
           onKeyDown={e => e.key === 'Enter' && !e.shiftKey && sendMessage()}
           disabled={sending}
         />
+        <button
+          type="button"
+          className="chat-icon-btn"
+          onClick={() => setShowTemplate(value => !value)}
+          title={showTemplate ? 'Hide template' : 'Show template'}
+          aria-label={showTemplate ? 'Hide prompt template' : 'Show prompt template'}
+          aria-pressed={showTemplate}
+        >
+          T
+        </button>
+        {hasTurns && (
+          <button
+            type="button"
+            className="chat-icon-btn"
+            onClick={() => { setTurns([]); setError('') }}
+            title="Clear conversation"
+            aria-label="Clear conversation"
+          >
+            ×
+          </button>
+        )}
         <button
           className="chat-send-btn"
           onClick={() => sendMessage()}

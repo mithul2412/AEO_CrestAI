@@ -63,13 +63,45 @@ export function RunProvider({ children }) {
   const [error, setError] = useState('')
   const [theme, setTheme] = useState(getInitialTheme)
   const [chatDraft, setChatDraft] = useState({ text: '', token: 0 })
+  const [querySuggestions, setQuerySuggestions] = useState([])
+  const [querySuggestionsLoading, setQuerySuggestionsLoading] = useState(false)
+  const [querySuggestionsMeta, setQuerySuggestionsMeta] = useState(null)
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme
     window.localStorage.setItem(THEME_KEY, theme)
   }, [theme])
 
-  const handleBaselineAnalyze = useCallback(async (nextMarkdown, nextSourceSignals = {}, nextPageIntelligence = null) => {
+  const generateQuerySuggestions = useCallback(async (nextMarkdown, nextPageIntelligence = null, nextNormalizedUrl = '') => {
+    if (!nextMarkdown) return
+    setQuerySuggestionsLoading(true)
+    setQuerySuggestionsMeta(null)
+    try {
+      const res = await fetch('/analyze/query-suggestions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          markdown: nextMarkdown,
+          sourceUrl: nextNormalizedUrl,
+          pageIntelligence: nextPageIntelligence || {},
+        }),
+      })
+      if (!res.ok) throw new Error(await readApiError(res, `Query suggestions error: ${res.status}`))
+      const data = await res.json()
+      setQuerySuggestions(Array.isArray(data.queries) ? data.queries : [])
+      setQuerySuggestionsMeta({
+        model: data.model || '',
+        fallback: Boolean(data.fallback),
+      })
+    } catch (e) {
+      setQuerySuggestions([])
+      setQuerySuggestionsMeta({ error: e.message, fallback: true })
+    } finally {
+      setQuerySuggestionsLoading(false)
+    }
+  }, [])
+
+  const handleBaselineAnalyze = useCallback(async (nextMarkdown, nextSourceSignals = {}, nextPageIntelligence = null, nextNormalizedUrl = '') => {
     setContentAnalyzing(true)
     setError('')
     try {
@@ -85,12 +117,13 @@ export function RunProvider({ children }) {
       if (!res.ok) throw new Error(await readApiError(res, `Analyze error: ${res.status}`))
       const data = await res.json()
       setBaselineResults(mergeResultsWithBaseline(data, null))
+      void generateQuerySuggestions(nextMarkdown, nextPageIntelligence, nextNormalizedUrl)
     } catch (e) {
       setError(e.message)
     } finally {
       setContentAnalyzing(false)
     }
-  }, [])
+  }, [generateQuerySuggestions])
 
   const handleFetchComplete = useCallback((nextMarkdown, nextCharCount, nextSourceSignals = {}, nextPageIntelligence = null, nextNormalizedUrl = '') => {
     setMarkdown(nextMarkdown)
@@ -99,9 +132,11 @@ export function RunProvider({ children }) {
     setSourceSignals(nextSourceSignals)
     setPageIntelligence(nextPageIntelligence)
     setQuery('')
+    setQuerySuggestions([])
+    setQuerySuggestionsMeta(null)
     setBaselineResults(null)
     setResults(null)
-    void handleBaselineAnalyze(nextMarkdown, nextSourceSignals, nextPageIntelligence)
+    void handleBaselineAnalyze(nextMarkdown, nextSourceSignals, nextPageIntelligence, nextNormalizedUrl || nextSourceSignals?.sourceUrl || url)
   }, [handleBaselineAnalyze, url])
 
   const handleAnalyze = useCallback(async () => {
@@ -140,6 +175,9 @@ export function RunProvider({ children }) {
     setSourceSignals({})
     setPageIntelligence(null)
     setQuery('')
+    setQuerySuggestions([])
+    setQuerySuggestionsMeta(null)
+    setQuerySuggestionsLoading(false)
     setBaselineResults(null)
     setResults(null)
     setError('')
@@ -160,7 +198,7 @@ export function RunProvider({ children }) {
     url, normalizedUrl, markdown, charCount, sourceSignals, pageIntelligence,
     query, theme, baselineResults, results, activeResults,
     contentAnalyzing, queryAnalyzing, error,
-    chatDraft,
+    chatDraft, querySuggestions, querySuggestionsLoading, querySuggestionsMeta,
 
     // derived
     hasFetched, hasBaseline, hasQueryResults,
@@ -169,14 +207,14 @@ export function RunProvider({ children }) {
     setUrl, setQuery, setTheme,
 
     // actions
-    handleFetchComplete, handleAnalyze, handleBaselineAnalyze,
+    handleFetchComplete, handleAnalyze, handleBaselineAnalyze, generateQuerySuggestions,
     startNewTest, sendDraftToChat,
   }), [
     url, normalizedUrl, markdown, charCount, sourceSignals, pageIntelligence,
     query, theme, baselineResults, results, activeResults,
-    contentAnalyzing, queryAnalyzing, error, chatDraft,
+    contentAnalyzing, queryAnalyzing, error, chatDraft, querySuggestions, querySuggestionsLoading, querySuggestionsMeta,
     hasFetched, hasBaseline, hasQueryResults,
-    handleFetchComplete, handleAnalyze, handleBaselineAnalyze,
+    handleFetchComplete, handleAnalyze, handleBaselineAnalyze, generateQuerySuggestions,
     startNewTest, sendDraftToChat,
   ])
 

@@ -71,7 +71,7 @@ export default function AgenticReadinessPanel({
       <div className="agentic-panel-actions">
         <button
           type="button"
-          className={`btn-send${loading ? ' loading' : ''}`}
+          className={`btn${loading ? ' loading' : ''}`}
           onClick={handleGenerate}
           disabled={!ready || loading}
         >

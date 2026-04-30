@@ -50,6 +50,15 @@ describe('Chat', () => {
     expect(await screen.findByText(/GPT OSS answer with/)).toBeInTheDocument()
   })
 
+  it('shows context strip but hides model selector before the first response', () => {
+    render(<Chat markdown="# Test page" stage="post-query" query="best ai crm" fixSource="Model verdict" />)
+
+    expect(screen.getByText('Query')).toBeInTheDocument()
+    expect(screen.getByText('best ai crm')).toBeInTheDocument()
+    expect(screen.getByText('Model verdict')).toBeInTheDocument()
+    expect(screen.queryByRole('group', { name: 'Select model' })).not.toBeInTheDocument()
+  })
+
   it('prefills the chat input when a verdict draft is provided', () => {
     render(
       <Chat
