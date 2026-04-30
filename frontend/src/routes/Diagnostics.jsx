@@ -479,9 +479,6 @@ export default function Diagnostics() {
     navigate('/rewrite')
   }
 
-  const gap = typeof results?.gapScore === 'number' ? results.gapScore : null
-  const gapLabel = typeof gap === 'number' ? `${gap >= 0 ? '+' : ''}${gap}` : '—'
-
   return (
     <div className="diag">
       <header className="diag-header">

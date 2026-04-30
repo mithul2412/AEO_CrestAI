@@ -51,10 +51,17 @@ export function getAnswerGapCopy(gapScore) {
     }
   }
 
+  const pointLabel = Math.abs(gapScore) === 1 ? 'point' : 'points'
+  const directionDetail = gapScore > 0
+    ? `answer quality is ${Math.abs(gapScore)} ${pointLabel} behind page quality`
+    : gapScore < 0
+      ? `answer quality is ${Math.abs(gapScore)} ${pointLabel} ahead of page quality`
+      : 'answer quality matches page quality'
+
   if (gapScore >= 15) {
     return {
       label: 'Large answer gap',
-      detail: 'The page looks stronger overall than it does for this exact query.',
+      detail: `For this target query, ${directionDetail}. The page needs a more direct, quotable answer.`,
       tone: 'danger',
     }
   }
@@ -62,7 +69,7 @@ export function getAnswerGapCopy(gapScore) {
   if (gapScore >= 5) {
     return {
       label: 'Moderate answer gap',
-      detail: 'The answer is present, but the page should make it more direct and quotable.',
+      detail: `For this target query, ${directionDetail}. The answer is present, but should be more direct and quotable.`,
       tone: 'warn',
     }
   }
@@ -70,15 +77,51 @@ export function getAnswerGapCopy(gapScore) {
   if (gapScore >= -5) {
     return {
       label: 'Answer path aligned',
-      detail: 'The page quality and target-query answer are mostly aligned.',
+      detail: `The page quality and target-query answer are mostly aligned; ${directionDetail}.`,
       tone: 'ok',
     }
   }
 
   return {
     label: 'Query-led strength',
-    detail: 'The target answer is stronger than the broader page structure.',
+    detail: `For this target query, ${directionDetail}. The target answer is stronger than the broader page structure.`,
     tone: 'ok',
+  }
+}
+
+export function getAnswerGapMetric(gapScore) {
+  if (typeof gapScore !== 'number') {
+    return {
+      primary: '—',
+      compact: '—',
+      accessible: 'Answer gap unavailable.',
+    }
+  }
+
+  const points = Math.abs(gapScore)
+  const pointUnit = points === 1 ? 'pt' : 'pts'
+  const pointWord = points === 1 ? 'point' : 'points'
+
+  if (gapScore > 0) {
+    return {
+      primary: 'Gap',
+      compact: `${points} ${pointUnit} behind`,
+      accessible: `Answer quality trails page quality by ${points} ${pointWord}.`,
+    }
+  }
+
+  if (gapScore < 0) {
+    return {
+      primary: 'Aligned',
+      compact: `${points} ${pointUnit} ahead`,
+      accessible: `Answer quality leads page quality by ${points} ${pointWord}.`,
+    }
+  }
+
+  return {
+    primary: 'Aligned',
+    compact: 'Aligned',
+    accessible: 'Answer quality and page quality are aligned.',
   }
 }
 
@@ -105,7 +148,7 @@ export function getExecutiveQueryVerdict({ queryScore, gapScore, blockedState })
     return {
       title: 'This page answers the query clearly',
       meaning: 'The answer path is direct enough to inspect proof and polish the strongest section.',
-      next: 'Review the evidence, then tune the top answer block.',
+      next: 'Keep the answer direct, sourced, and easy to quote.',
       tone: 'ok',
     }
   }

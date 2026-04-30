@@ -25,9 +25,9 @@ export default function Source() {
   if (!hasFetched) {
     return (
       <EmptyBlock
-        kicker="Source"
+        kicker="Source Audit"
         title="No page loaded"
-        copy="Fetch a live URL from Overview to populate this view."
+        copy="Fetch a live URL from Overview to inspect the crawl, extraction, and source signals Crest used."
       />
     )
   }
@@ -38,6 +38,24 @@ export default function Source() {
   const warnings = [...(access.warnings || []), ...(extraction.warnings || [])]
   const llmsTxt = sourceSignals?.llmsTxt || {}
   const llmsFullTxt = sourceSignals?.llmsFullTxt || {}
+  const crawlerEntries = Object.entries(robots).map(([key, value]) => {
+    const status = statusValue(value)
+    return {
+      key,
+      name: CRAWLER_LABEL[key] || key,
+      status: status.label,
+      tone: status.tone,
+    }
+  })
+  const crawlerIssues = crawlerEntries.filter(crawler => crawler.tone !== 'ok')
+  const crawlerAccess = crawlerEntries.length === 0
+    ? { label: 'Not checked', tone: 'muted' }
+    : crawlerIssues.length === 0
+      ? { label: 'All checked crawlers allowed', tone: 'ok' }
+      : {
+          label: `${crawlerIssues.length} crawler ${crawlerIssues.length === 1 ? 'issue' : 'issues'} detected`,
+          tone: crawlerIssues.some(crawler => crawler.tone === 'danger') ? 'danger' : 'warn',
+        }
 
   const httpTone = access.statusCode >= 400 ? 'danger'
     : access.statusCode >= 300 ? 'warn'
@@ -48,13 +66,15 @@ export default function Source() {
       <section className="section">
         <div className="section__head">
           <div className="section__head-titles">
-            <span className="kicker">Source · what AI saw</span>
+            <span className="kicker">Source Audit</span>
             <h2 className="h-2">{normalizedUrl || 'Source page'}</h2>
+            <p className="caption">Use this view when a score looks surprising and you need to verify what Crest fetched, extracted, and checked.</p>
           </div>
           <StatPill tone={httpTone}>HTTP {access.statusCode ?? '—'}</StatPill>
         </div>
 
         <div className="data-list">
+          <DataRow label="HTTP status" value={access.statusCode ?? 'Unknown'} tone={httpTone} />
           <DataRow label="Final URL" value={access.finalUrl || normalizedUrl || '—'} />
           <DataRow label="Canonical" value={access.canonical || 'Not declared'} tone={access.canonical ? null : 'muted'} />
           <DataRow
@@ -63,8 +83,47 @@ export default function Source() {
             value={access.indexable === false ? 'Blocked' : access.indexable === true ? 'Allowed' : 'Unknown'}
             tone={access.indexable === false ? 'danger' : access.indexable === true ? 'ok' : 'muted'}
           />
+          <DataRow
+            label="AI crawler access"
+            hint="Summarizes robots policy for checked AI/search crawlers."
+            value={crawlerAccess.label}
+            tone={crawlerAccess.tone}
+          />
+          {crawlerIssues.map(crawler => (
+            <DataRow key={crawler.key} label={crawler.name} value={crawler.status} tone={crawler.tone} />
+          ))}
+        </div>
+      </section>
+
+      <section className="section">
+        <div className="section__head">
+          <div className="section__head-titles">
+            <span className="kicker">Extracted Identity</span>
+            <h2 className="h-2">What Crest recognized on the page.</h2>
+          </div>
+        </div>
+        <div className="data-list">
+          <DataRow label="Title" value={extraction.title || 'Missing'} tone={extraction.title ? null : 'danger'} mono={false} />
+          <DataRow label="H1" value={extraction.h1 || 'Missing'} tone={extraction.h1 ? null : 'danger'} mono={false} />
           <DataRow label="Word count" value={(extraction.wordCount || 0).toLocaleString()} />
           <DataRow label="Char count" value={charCount.toLocaleString()} />
+        </div>
+      </section>
+
+      <section className="section">
+        <div className="section__head">
+          <div className="section__head-titles">
+            <span className="kicker">AI-readable Signals</span>
+            <h2 className="h-2">Files and markup Crest checked.</h2>
+          </div>
+        </div>
+        <div className="data-list">
+          <DataRow
+            label="Schema types"
+            value={extraction.schemaTypes?.length ? extraction.schemaTypes.join(', ') : 'None detected'}
+            tone={extraction.schemaTypes?.length ? 'ok' : 'muted'}
+            mono={false}
+          />
           <DataRow
             label="llms.txt"
             value={llmsTxt.present ? 'Found' : 'Missing'}
@@ -74,42 +133,6 @@ export default function Source() {
             label="llms-full.txt"
             value={llmsFullTxt.present ? 'Found' : 'Missing'}
             tone={llmsFullTxt.present ? 'ok' : 'muted'}
-          />
-        </div>
-      </section>
-
-      <section className="section">
-        <div className="section__head">
-          <div className="section__head-titles">
-            <span className="kicker">Crawler matrix</span>
-            <h2 className="h-2">Robots policy by AI agent.</h2>
-          </div>
-        </div>
-        <div className="data-list">
-          {Object.entries(robots).length === 0 && (
-            <DataRow label="No robots policy detected" value="Unknown" tone="muted" />
-          )}
-          {Object.entries(robots).map(([key, value]) => {
-            const v = statusValue(value)
-            return <DataRow key={key} label={CRAWLER_LABEL[key] || key} value={v.label} tone={v.tone} />
-          })}
-        </div>
-      </section>
-
-      <section className="section">
-        <div className="section__head">
-          <div className="section__head-titles">
-            <span className="kicker">Extraction</span>
-            <h2 className="h-2">What AI sees as page identity.</h2>
-          </div>
-        </div>
-        <div className="data-list">
-          <DataRow label="Title" value={extraction.title || 'Missing'} tone={extraction.title ? null : 'danger'} />
-          <DataRow label="H1" value={extraction.h1 || 'Missing'} tone={extraction.h1 ? null : 'danger'} />
-          <DataRow
-            label="Schema types"
-            value={extraction.schemaTypes?.length ? extraction.schemaTypes.join(', ') : 'None detected'}
-            tone={extraction.schemaTypes?.length ? 'ok' : 'muted'}
           />
         </div>
       </section>
@@ -136,7 +159,7 @@ export default function Source() {
       <section className="section">
         <div className="section__head">
           <div className="section__head-titles">
-            <span className="kicker">AI-readable preview</span>
+            <span className="kicker">AI-readable source preview</span>
             <h2 className="h-2">The markdown Crest.ai analyzed.</h2>
           </div>
           <button type="button" className="btn btn--ghost btn--sm" onClick={() => setPreviewOpen(v => !v)}>
