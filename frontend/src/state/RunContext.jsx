@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { readApiError } from '../utils/api.js'
 
 const RunContext = createContext(null)
@@ -66,6 +66,7 @@ export function RunProvider({ children }) {
   const [querySuggestions, setQuerySuggestions] = useState([])
   const [querySuggestionsLoading, setQuerySuggestionsLoading] = useState(false)
   const [querySuggestionsMeta, setQuerySuggestionsMeta] = useState(null)
+  const querySuggestionsAbortRef = useRef(null)
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme
@@ -74,6 +75,13 @@ export function RunProvider({ children }) {
 
   const generateQuerySuggestions = useCallback(async (nextMarkdown, nextPageIntelligence = null, nextNormalizedUrl = '') => {
     if (!nextMarkdown) return
+    // Cancel any in-flight request from a previous page
+    if (querySuggestionsAbortRef.current) {
+      querySuggestionsAbortRef.current.abort()
+    }
+    const controller = new AbortController()
+    querySuggestionsAbortRef.current = controller
+
     setQuerySuggestionsLoading(true)
     setQuerySuggestionsMeta(null)
     try {
@@ -85,6 +93,7 @@ export function RunProvider({ children }) {
           sourceUrl: nextNormalizedUrl,
           pageIntelligence: nextPageIntelligence || {},
         }),
+        signal: controller.signal,
       })
       if (!res.ok) throw new Error(await readApiError(res, `Query suggestions error: ${res.status}`))
       const data = await res.json()
@@ -94,10 +103,13 @@ export function RunProvider({ children }) {
         fallback: Boolean(data.fallback),
       })
     } catch (e) {
+      if (e.name === 'AbortError') return
       setQuerySuggestions([])
       setQuerySuggestionsMeta({ error: e.message, fallback: true })
     } finally {
-      setQuerySuggestionsLoading(false)
+      if (querySuggestionsAbortRef.current === controller) {
+        setQuerySuggestionsLoading(false)
+      }
     }
   }, [])
 
@@ -126,6 +138,11 @@ export function RunProvider({ children }) {
   }, [generateQuerySuggestions])
 
   const handleFetchComplete = useCallback((nextMarkdown, nextCharCount, nextSourceSignals = {}, nextPageIntelligence = null, nextNormalizedUrl = '') => {
+    // Abort any in-flight query-suggestion request for the previous page
+    if (querySuggestionsAbortRef.current) {
+      querySuggestionsAbortRef.current.abort()
+      querySuggestionsAbortRef.current = null
+    }
     setMarkdown(nextMarkdown)
     setNormalizedUrl(nextNormalizedUrl || nextSourceSignals?.sourceUrl || url)
     setCharCount(nextCharCount)
@@ -134,6 +151,7 @@ export function RunProvider({ children }) {
     setQuery('')
     setQuerySuggestions([])
     setQuerySuggestionsMeta(null)
+    setQuerySuggestionsLoading(false)
     setBaselineResults(null)
     setResults(null)
     void handleBaselineAnalyze(nextMarkdown, nextSourceSignals, nextPageIntelligence, nextNormalizedUrl || nextSourceSignals?.sourceUrl || url)
