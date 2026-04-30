@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { readApiError } from '../utils/api.js'
+import { getDemoSnapshot } from '../demoSnapshots.js'
 
 const RunContext = createContext(null)
 const THEME_KEY = 'aeo-scorer-theme'
@@ -7,6 +8,17 @@ const THEME_KEY = 'aeo-scorer-theme'
 function getInitialTheme() {
   if (typeof window === 'undefined') return 'light'
   return window.localStorage.getItem(THEME_KEY) || 'light'
+}
+
+function getInitialDemoSnapshot() {
+  if (typeof window === 'undefined') return null
+  const pathMatch = window.location.pathname.match(/^\/demo\/([^/]+)/)
+  const id = pathMatch?.[1] || window.sessionStorage.getItem('crest-demo-snapshot')
+  const snapshot = id ? getDemoSnapshot(id) : null
+  if (snapshot?.id) {
+    window.sessionStorage.setItem('crest-demo-snapshot', snapshot.id)
+  }
+  return snapshot
 }
 
 function computeOverallScore(results) {
@@ -49,23 +61,25 @@ function mergeResultsWithBaseline(nextResults, baselineResults) {
 }
 
 export function RunProvider({ children }) {
-  const [url, setUrl] = useState('')
-  const [normalizedUrl, setNormalizedUrl] = useState('')
-  const [markdown, setMarkdown] = useState('')
-  const [charCount, setCharCount] = useState(0)
-  const [sourceSignals, setSourceSignals] = useState({})
-  const [pageIntelligence, setPageIntelligence] = useState(null)
-  const [query, setQuery] = useState('')
-  const [baselineResults, setBaselineResults] = useState(null)
-  const [results, setResults] = useState(null)
+  const [demoSnapshot] = useState(getInitialDemoSnapshot)
+  const demoMode = Boolean(demoSnapshot)
+  const [url, setUrl] = useState(demoSnapshot?.url || '')
+  const [normalizedUrl, setNormalizedUrl] = useState(demoSnapshot?.normalizedUrl || '')
+  const [markdown, setMarkdown] = useState(demoSnapshot?.markdown || '')
+  const [charCount, setCharCount] = useState(demoSnapshot?.charCount || 0)
+  const [sourceSignals, setSourceSignals] = useState(demoSnapshot?.sourceSignals || {})
+  const [pageIntelligence, setPageIntelligence] = useState(demoSnapshot?.pageIntelligence || null)
+  const [query, setQuery] = useState(demoSnapshot?.query || '')
+  const [baselineResults, setBaselineResults] = useState(demoSnapshot?.baselineResults || null)
+  const [results, setResults] = useState(demoSnapshot?.results || null)
   const [contentAnalyzing, setContentAnalyzing] = useState(false)
   const [queryAnalyzing, setQueryAnalyzing] = useState(false)
   const [error, setError] = useState('')
   const [theme, setTheme] = useState(getInitialTheme)
   const [chatDraft, setChatDraft] = useState({ text: '', token: 0 })
-  const [querySuggestions, setQuerySuggestions] = useState([])
+  const [querySuggestions, setQuerySuggestions] = useState(demoSnapshot?.querySuggestions || [])
   const [querySuggestionsLoading, setQuerySuggestionsLoading] = useState(false)
-  const [querySuggestionsMeta, setQuerySuggestionsMeta] = useState(null)
+  const [querySuggestionsMeta, setQuerySuggestionsMeta] = useState(demoSnapshot?.querySuggestionsMeta || null)
   const querySuggestionsAbortRef = useRef(null)
 
   const cancelPendingQuerySuggestions = useCallback(() => {
@@ -81,6 +95,7 @@ export function RunProvider({ children }) {
   }, [theme])
 
   const generateQuerySuggestions = useCallback(async (nextMarkdown, nextPageIntelligence = null, nextNormalizedUrl = '') => {
+    if (demoMode) return
     if (!nextMarkdown) return
     // Cancel any in-flight request before starting a new one
     cancelPendingQuerySuggestions()
@@ -116,9 +131,13 @@ export function RunProvider({ children }) {
         setQuerySuggestionsLoading(false)
       }
     }
-  }, [cancelPendingQuerySuggestions])
+  }, [cancelPendingQuerySuggestions, demoMode])
 
   const handleBaselineAnalyze = useCallback(async (nextMarkdown, nextSourceSignals = {}, nextPageIntelligence = null, nextNormalizedUrl = '') => {
+    if (demoMode) {
+      setError('Demo snapshot is read-only. Live analysis is disabled.')
+      return
+    }
     setContentAnalyzing(true)
     setError('')
     try {
@@ -140,9 +159,13 @@ export function RunProvider({ children }) {
     } finally {
       setContentAnalyzing(false)
     }
-  }, [generateQuerySuggestions])
+  }, [demoMode, generateQuerySuggestions])
 
   const handleFetchComplete = useCallback((nextMarkdown, nextCharCount, nextSourceSignals = {}, nextPageIntelligence = null, nextNormalizedUrl = '') => {
+    if (demoMode) {
+      setError('Demo snapshot is read-only. Start a new live run outside demo mode to fetch a page.')
+      return
+    }
     // Abort any in-flight query-suggestion request for the previous page
     cancelPendingQuerySuggestions()
     setMarkdown(nextMarkdown)
@@ -157,9 +180,13 @@ export function RunProvider({ children }) {
     setBaselineResults(null)
     setResults(null)
     void handleBaselineAnalyze(nextMarkdown, nextSourceSignals, nextPageIntelligence, nextNormalizedUrl || nextSourceSignals?.sourceUrl || url)
-  }, [cancelPendingQuerySuggestions, handleBaselineAnalyze, url])
+  }, [cancelPendingQuerySuggestions, demoMode, handleBaselineAnalyze, url])
 
   const handleAnalyze = useCallback(async () => {
+    if (demoMode) {
+      setError('Demo snapshot is read-only. Live query scoring is disabled.')
+      return
+    }
     if (!markdown) return
     setQueryAnalyzing(true)
     setError('')
@@ -184,9 +211,12 @@ export function RunProvider({ children }) {
     } finally {
       setQueryAnalyzing(false)
     }
-  }, [baselineResults, markdown, normalizedUrl, pageIntelligence, query, sourceSignals])
+  }, [baselineResults, demoMode, markdown, normalizedUrl, pageIntelligence, query, sourceSignals])
 
   const startNewTest = useCallback(() => {
+    if (typeof window !== 'undefined') {
+      window.sessionStorage.removeItem('crest-demo-snapshot')
+    }
     window.scrollTo({ top: 0, behavior: 'smooth' })
     setUrl('')
     setNormalizedUrl('')
@@ -219,6 +249,7 @@ export function RunProvider({ children }) {
     query, theme, baselineResults, results, activeResults,
     contentAnalyzing, queryAnalyzing, error,
     chatDraft, querySuggestions, querySuggestionsLoading, querySuggestionsMeta,
+    demoMode, demoSnapshot,
 
     // derived
     hasFetched, hasBaseline, hasQueryResults,
@@ -233,6 +264,7 @@ export function RunProvider({ children }) {
     url, normalizedUrl, markdown, charCount, sourceSignals, pageIntelligence,
     query, theme, baselineResults, results, activeResults,
     contentAnalyzing, queryAnalyzing, error, chatDraft, querySuggestions, querySuggestionsLoading, querySuggestionsMeta,
+    demoMode, demoSnapshot,
     hasFetched, hasBaseline, hasQueryResults,
     handleFetchComplete, handleAnalyze, handleBaselineAnalyze, generateQuerySuggestions,
     startNewTest, sendDraftToChat,

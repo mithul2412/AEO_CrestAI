@@ -14,6 +14,7 @@ export default function App() {
         <Routes>
           <Route element={<AppShell />}>
             <Route index element={<Overview />} />
+            <Route path="demo/xfinity" element={<Overview />} />
             <Route path="diagnostics" element={<Diagnostics />} />
             <Route path="rewrite" element={<Rewrite />} />
             <Route path="agentic" element={<Agentic />} />

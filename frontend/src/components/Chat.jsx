@@ -222,6 +222,7 @@ export default function Chat({
   fixSource = '',
   querySuggestions = [],
   querySuggestionsLoading = false,
+  readOnly = false,
 }) {
   const [turns, setTurns] = useState([])
   const [input, setInput] = useState('')
@@ -267,6 +268,10 @@ export default function Chat({
   const sendMessage = async (text) => {
     const userText = text || input.trim()
     if (!userText || sending) return
+    if (readOnly) {
+      setError('Demo snapshot is read-only. Chat calls are disabled.')
+      return
+    }
 
     setInput('')
     setError('')
@@ -379,7 +384,7 @@ export default function Chat({
           })}
         </div>
         <span className="chat-model-picker__hint">
-          {selectedModelIds.length === MODELS.length ? 'All models on' : `${selectedModelIds.length} of ${MODELS.length} on`}
+          {readOnly ? 'Static demo mode' : selectedModelIds.length === MODELS.length ? 'All models on' : `${selectedModelIds.length} of ${MODELS.length} on`}
         </span>
       </div>
 
@@ -397,6 +402,10 @@ export default function Chat({
           <strong>{fixSource || (draft ? 'Diagnostics draft' : 'Chat prompt')}</strong>
         </div>
       </div>
+
+      {readOnly && (
+        <div className="agentic-empty">Demo snapshot is read-only. Rewrite chat is visible, but live model calls are disabled.</div>
+      )}
 
       {!hasTurns && (querySuggestionsLoading || querySuggestions.length > 0) && (
         <div className="suggestion-row">
@@ -475,7 +484,7 @@ export default function Chat({
           value={input}
           onChange={e => setInput(e.target.value)}
           onKeyDown={e => e.key === 'Enter' && !e.shiftKey && sendMessage()}
-          disabled={sending}
+          disabled={sending || readOnly}
         />
         <button
           type="button"
@@ -501,7 +510,7 @@ export default function Chat({
         <button
           className="chat-send-btn"
           onClick={() => sendMessage()}
-          disabled={sending || !input.trim()}
+          disabled={readOnly || sending || !input.trim()}
         >
           {sending ? <><WanderingEyes className="wandering-eyes-button" title="Sending chat message" /> Sending...</> : 'Send'}
         </button>

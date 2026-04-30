@@ -1,4 +1,4 @@
-import { NavLink } from 'react-router-dom'
+import { NavLink, useLocation } from 'react-router-dom'
 import { useRun } from '../../state/RunContext.jsx'
 
 const Icon = {
@@ -34,7 +34,9 @@ const Icon = {
 }
 
 export default function NavRail() {
+  const { pathname } = useLocation()
   const { hasFetched, hasBaseline, hasQueryResults, contentAnalyzing, queryAnalyzing, error } = useRun()
+  const demoOverviewActive = pathname.startsWith('/demo/')
 
   const sourceState = !hasFetched ? '—'
     : (error && !hasBaseline) ? 'error'
@@ -64,7 +66,7 @@ export default function NavRail() {
           key={item.to}
           to={item.to}
           end={item.end}
-          className={({ isActive }) => `navrail__item${item.secondary ? ' navrail__item--secondary' : ''}${isActive ? ' active' : ''}`}
+          className={({ isActive }) => `navrail__item${item.secondary ? ' navrail__item--secondary' : ''}${isActive || (item.end && demoOverviewActive) ? ' active' : ''}`}
           title={item.label}
         >
           <span className="navrail__item-icon">{item.icon}</span>

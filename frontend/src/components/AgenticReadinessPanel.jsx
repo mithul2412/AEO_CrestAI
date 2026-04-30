@@ -9,20 +9,31 @@ export default function AgenticReadinessPanel({
   query,
   analysis,
   sourceSignals,
+  initialResult = null,
+  demoMode = false,
 }) {
-  const [result, setResult] = useState(null)
+  const [result, setResult] = useState(initialResult)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
   useEffect(() => {
+    if (demoMode) {
+      setResult(initialResult)
+      setError('')
+      return
+    }
     setResult(null)
     setError('')
-  }, [url, markdown])
+  }, [demoMode, initialResult, url, markdown])
 
   const ready = Boolean(markdown && analysis)
 
   const handleGenerate = useCallback(async () => {
     if (!ready) return
+    if (demoMode) {
+      setError('Demo snapshot is read-only. Agentic generation is disabled.')
+      return
+    }
 
     setLoading(true)
     setError('')
@@ -40,7 +51,7 @@ export default function AgenticReadinessPanel({
     } finally {
       setLoading(false)
     }
-  }, [analysis, markdown, query, ready, sourceSignals, url])
+  }, [analysis, demoMode, markdown, query, ready, sourceSignals, url])
 
   const handleResultUpdate = useCallback(update => {
     setResult(current => current ? {
@@ -73,12 +84,12 @@ export default function AgenticReadinessPanel({
           type="button"
           className={`btn${loading ? ' loading' : ''}`}
           onClick={handleGenerate}
-          disabled={!ready || loading}
+          disabled={!ready || loading || demoMode}
         >
-          {loading ? <><span className="spinner" /> Generating...</> : 'Generate Agentic AI Readiness Layer'}
+          {loading ? <><span className="spinner" /> Generating...</> : demoMode ? 'Static demo artifacts loaded' : 'Generate Agentic AI Readiness Layer'}
         </button>
         <span className={`summary-pill ${ready ? 'ok' : 'warn'}`}>
-          {ready ? 'Baseline ready' : 'Waiting for baseline'}
+          {demoMode ? 'Demo snapshot' : ready ? 'Baseline ready' : 'Waiting for baseline'}
         </span>
       </div>
 
@@ -97,7 +108,7 @@ export default function AgenticReadinessPanel({
       {result && (
         <>
           <ArtifactTabs result={result} />
-          <AgenticMonitoringPanel result={result} onResultUpdate={handleResultUpdate} />
+          <AgenticMonitoringPanel result={result} onResultUpdate={handleResultUpdate} demoMode={demoMode} />
         </>
       )}
     </div>

@@ -127,7 +127,7 @@ function ApprovalCard({ approval, onApprove, onReject, busyId }) {
   )
 }
 
-export default function AgenticMonitoringPanel({ result, onResultUpdate }) {
+export default function AgenticMonitoringPanel({ result, onResultUpdate, demoMode = false }) {
   const slug = result?.slug
   const [profileSummary, setProfileSummary] = useState(null)
   const [approvals, setApprovals] = useState([])
@@ -138,6 +138,11 @@ export default function AgenticMonitoringPanel({ result, onResultUpdate }) {
   const [error, setError] = useState('')
 
   const refreshState = useCallback(async () => {
+    if (demoMode) {
+      setProfileSummary(null)
+      setApprovals([])
+      return
+    }
     if (!slug) return
     const [profilesData, approvalsData] = await Promise.all([
       listAgenticProfiles(),
@@ -145,7 +150,7 @@ export default function AgenticMonitoringPanel({ result, onResultUpdate }) {
     ])
     setProfileSummary((profilesData.profiles || []).find(profile => profile.slug === slug) || null)
     setApprovals((approvalsData.approvals || []).filter(approval => approval.slug === slug))
-  }, [slug])
+  }, [demoMode, slug])
 
   useEffect(() => {
     setError('')
@@ -167,6 +172,10 @@ export default function AgenticMonitoringPanel({ result, onResultUpdate }) {
   const hasSourceUrl = useMemo(() => Boolean(result?.canonicalProfile?.source?.sourceUrl), [result])
 
   const runRescan = useCallback(async useContent => {
+    if (demoMode) {
+      setError('Demo snapshot is read-only. Live rescans are disabled.')
+      return
+    }
     if (!slug) return
     setLoading(true)
     setError('')
@@ -191,9 +200,13 @@ export default function AgenticMonitoringPanel({ result, onResultUpdate }) {
     } finally {
       setLoading(false)
     }
-  }, [onResultUpdate, refreshState, rescanContent, slug])
+  }, [demoMode, onResultUpdate, refreshState, rescanContent, slug])
 
   const handleApprove = useCallback(async id => {
+    if (demoMode) {
+      setError('Demo snapshot is read-only. Approvals are disabled.')
+      return
+    }
     setApprovalBusyId(id)
     setError('')
     try {
@@ -214,9 +227,13 @@ export default function AgenticMonitoringPanel({ result, onResultUpdate }) {
     } finally {
       setApprovalBusyId('')
     }
-  }, [onResultUpdate, refreshState])
+  }, [demoMode, onResultUpdate, refreshState])
 
   const handleReject = useCallback(async id => {
+    if (demoMode) {
+      setError('Demo snapshot is read-only. Approvals are disabled.')
+      return
+    }
     setApprovalBusyId(id)
     setError('')
     try {
@@ -228,7 +245,7 @@ export default function AgenticMonitoringPanel({ result, onResultUpdate }) {
     } finally {
       setApprovalBusyId('')
     }
-  }, [refreshState])
+  }, [demoMode, refreshState])
 
   if (!slug) return null
 
@@ -273,8 +290,10 @@ export default function AgenticMonitoringPanel({ result, onResultUpdate }) {
         <span className="agentic-card-label">Last rescan summary</span>
         <p>{monitoring.lastRescanSummary || 'No rescan has run for this profile yet.'}</p>
         {sourceUrl && <small>Source: {sourceUrl}</small>}
+        {demoMode && <small>Static demo mode: live rescans and approvals are disabled.</small>}
       </div>
 
+      {!demoMode && (
       <div className="agentic-rescan-controls">
         <textarea
           className="preview-textarea agentic-rescan-textarea"
@@ -302,6 +321,7 @@ export default function AgenticMonitoringPanel({ result, onResultUpdate }) {
           </button>
         </div>
       </div>
+      )}
 
       {rescanResult && (
         <div className="agentic-rescan-result">
