@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { readApiError } from '../utils/api.js'
-import InfinityLoop from './InfinityLoop.jsx'
+import { LoaderThree } from './ui/loader.jsx'
 
 function normalizeUrlInput(input) {
   const raw = input.trim()
@@ -155,9 +155,7 @@ export default function UrlInput({ url, onUrlChange, onFetchComplete }) {
           onClick={handleFetch}
           disabled={fetching}
         >
-          {fetching
-            ? <><InfinityLoop className="infinity-loop-button" title="Accessing page content" /> Accessing...</>
-            : 'Fetch Page'}
+          {fetching ? 'Accessing...' : 'Fetch Page'}
         </button>
       </div>
 
@@ -173,7 +171,7 @@ export default function UrlInput({ url, onUrlChange, onFetchComplete }) {
         {(fetching || fetchDone) && (
           <span className="fetch-inline-meta">
             {fetching
-              ? <><InfinityLoop className="infinity-loop-inline" title="Reading page content" /> Reading page content...</>
+              ? <><LoaderThree /> Reading page content...</>
               : `${charCount.toLocaleString()} chars${chunkCount > 0 ? ` · ${chunkCount} chunks` : ''}`}
           </span>
         )}
