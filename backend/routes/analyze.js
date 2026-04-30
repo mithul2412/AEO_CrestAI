@@ -1,15 +1,15 @@
 import { Router } from 'express'
 import { computeGeoScore } from '../utils/geoScorer.js'
 import { computeGeuScore } from '../utils/geuScorer.js'
-import { ANALYSIS_PROMPT, DYNAMIC_FIX_PROMPT, LLM_CONTENT_SCORE_PROMPT, QUERY_SUGGESTION_PROMPT } from '../models.js'
+import { ANALYSIS_PROMPT, DYNAMIC_FIX_PROMPT, LLM_CONTENT_SCORE_PROMPT, getQuerySuggestionPrompt } from '../models.js'
 import { applyCompetitorGapScore, buildBaselineIntelligence, buildQueryIntelligence } from '../services/intelligenceScorer.js'
 import { generateHighestImpactFix } from '../services/fixGeneratorService.js'
 import { buildCompetitorCorpus } from '../services/competitorCorpusService.js'
 import { compareUserVsCompetitors } from '../services/competitorGapService.js'
 import { buildCompetitorMap } from '../services/competitorMapService.js'
-import { averageScores, getLlamaQueryModel, runJsonModelPanel, runSingleJsonModel } from '../services/openRouterModels.js'
-import { buildQueryDiscovery } from '../services/queryDiscoveryService.js'
-import { packContextForBaseline, packContextForQuery } from '../services/contextPacker.js'
+import { averageScores, deriveScoreConfidence, getLlamaQueryModel, runJsonModelPanel, runSingleJsonModel, OPENROUTER_MODELS } from '../services/openRouterModels.js'
+import { buildQueryDiscovery, detectPageType, fallbackQueriesForPageType, isReferenceNoiseSection } from '../services/queryDiscoveryService.js'
+import { packContextForBaseline, packContextForQuery, packContextForSuggestions } from '../services/contextPacker.js'
 
 const router = Router()
 export const FAILURE_MODES = [
@@ -83,19 +83,32 @@ function pageBrandFromSource(sourceUrl = '', pageIntelligence = {}) {
   }
 }
 
-export function fallbackQuerySuggestions({ sourceUrl = '', pageIntelligence = {} } = {}) {
-  const brand = pageBrandFromSource(sourceUrl, pageIntelligence)
-  return [
-    `What is ${brand} best for?`,
-    `How does ${brand} compare to alternatives?`,
-    `What should buyers know about ${brand}?`,
-  ]
+function sanitizeQueryString(raw) {
+  return String(raw || '')
+    .replace(/^[-*•]\s+/, '')
+    .replace(/^\d+\.\s+/, '')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&nbsp;/g, ' ')
+    .replace(/\s+/g, ' ').trim()
+}
+
+export function fallbackQuerySuggestions({ sourceUrl = '', pageIntelligence = {}, pageType = 'commercial', markdown = '', brand = '', category = '' } = {}) {
+  const derivedBrand = brand || pageBrandFromSource(sourceUrl, pageIntelligence)
+  const h1 = String(pageIntelligence?.extraction?.h1 || pageIntelligence?.extraction?.title || '').trim()
+  const subject = h1 || derivedBrand
+  const cat = category || 'provider'
+  return fallbackQueriesForPageType({ pageType, brand: derivedBrand, h1: subject, category: cat })
+    .map(sanitizeQueryString)
 }
 
 export function normalizeQuerySuggestionsPayload(model, parsed, fallback = []) {
   const seen = new Set()
   const queries = (Array.isArray(parsed?.queries) ? parsed.queries : [])
-    .map(query => String(query || '').replace(/\s+/g, ' ').trim())
+    .map(sanitizeQueryString)
     .filter(query => query.length >= 12 && query.length <= 120)
     .map(query => query.endsWith('?') ? query : `${query}?`)
     .filter(query => {
@@ -228,16 +241,16 @@ async function runLlmContentScore(markdown, pageIntelligence = {}) {
     normalize: normalizeContentPayload,
     maxTokens: 450,
   })
-  const llmContentScore = averageScores(
-    panel.values
-      .map(modelReadout => modelReadout.llmContentScore)
-      .filter(score => typeof score === 'number')
-  )
+  const numericReadouts = panel.values
+    .map(modelReadout => modelReadout.llmContentScore)
+    .filter(score => typeof score === 'number')
+  const llmContentScore = averageScores(numericReadouts)
 
   return {
     llmContentScore,
     llmContentModels: panel.values,
     llmContentStatus: panel.status,
+    llmContentConfidence: deriveScoreConfidence({ expected: OPENROUTER_MODELS.length, returned: numericReadouts.length }),
   }
 }
 
@@ -253,22 +266,35 @@ router.post('/query-suggestions', async (req, res) => {
   }
 
     const suggestionModel = getLlamaQueryModel()
-  const fallback = fallbackQuerySuggestions({ sourceUrl, pageIntelligence })
+  const pageType = detectPageType({ sourceUrl, pageIntelligence, markdown })
+  const discovery = buildQueryDiscovery({ sourceUrl, markdown, pageIntelligence })
+  const brand = discovery?.brand || ''
+  const category = discovery?.category || ''
+  const fallback = fallbackQuerySuggestions({ sourceUrl, pageIntelligence, pageType, markdown, brand, category })
 
   try {
     const result = await runSingleJsonModel({
       model: suggestionModel,
-      prompt: QUERY_SUGGESTION_PROMPT,
+      prompt: getQuerySuggestionPrompt(pageType),
       content: [
+        `Page type: ${pageType}`,
         `Source URL: ${sourceUrl || 'unknown'}`,
         `Page title: ${pageIntelligence?.extraction?.title || 'unknown'}`,
         `H1: ${pageIntelligence?.extraction?.h1 || 'unknown'}`,
+        `Brand / product name (use this in the named-entity question): ${brand || 'unknown'}`,
+        `Category (use this in the two category-level questions): ${category || 'unknown'}`,
         '',
-        `Content:\n${packContextForBaseline({ markdown, pageIntelligence, budgetTokens: suggestionModel.contextTokens })}`,
+        `Content:\n${packContextForSuggestions({
+          markdown,
+          pageIntelligence,
+          pageType,
+          budgetTokens: Math.min(suggestionModel.contextTokens, 2000),
+          isNoiseSection: isReferenceNoiseSection,
+        })}`,
       ].join('\n'),
       normalize: (model, parsed) => normalizeQuerySuggestionsPayload(model, parsed, fallback),
       maxTokens: 350,
-      temperature: 0.4,
+      temperature: 0.3,
     })
 
     return res.json({
@@ -277,12 +303,18 @@ router.post('/query-suggestions', async (req, res) => {
       modelId: result.modelId,
       credentialLabel: result.credentialLabel,
       fallback: Boolean(result.fallback),
+      pageType,
+      brand,
+      category,
     })
   } catch (err) {
     return res.json({
       queries: fallback,
       model: suggestionModel.label,
       fallback: true,
+      pageType,
+      brand,
+      category,
       error: err?.message || 'Query suggestions unavailable',
     })
   }
@@ -311,6 +343,7 @@ router.post('/', async (req, res) => {
         llmContentScore,
         llmContentModels,
         llmContentStatus,
+        llmContentConfidence,
       } = await runLlmContentScore(markdown, pageIntelligence)
 
       const overallScore = buildOverallScore({ contentScore, geuScore, llmContentScore })
@@ -322,6 +355,8 @@ router.post('/', async (req, res) => {
         llmContentScore,
         llmContentModels,
         llmContentStatus,
+        llmContentConfidence,
+        scoreConfidence: llmContentConfidence,
         overallScore,
         queryScore: null,
         gapScore: null,
@@ -342,11 +377,14 @@ router.post('/', async (req, res) => {
     const verdicts = queryPanel.values
     const modelStatus = queryPanel.status
 
-    const llmQueryScore = averageScores(
-      verdicts
-        .map(verdict => verdict.queryMatchScore)
-        .filter(score => typeof score === 'number')
-    )
+    const numericVerdictScores = verdicts
+      .map(verdict => verdict.queryMatchScore)
+      .filter(score => typeof score === 'number')
+    const llmQueryScore = averageScores(numericVerdictScores)
+    const queryScoreConfidence = deriveScoreConfidence({
+      expected: OPENROUTER_MODELS.length,
+      returned: numericVerdictScores.length,
+    })
 
     const normalizedBaselineLlm = clampScore(baselineLlmContentScore)
     const queryDiscovery = buildQueryDiscovery({
@@ -520,6 +558,8 @@ router.post('/', async (req, res) => {
       queryScore,
       llmQueryScore,
       deterministicQueryScore,
+      scoreConfidence: queryScoreConfidence,
+      queryScoreConfidence,
       gapScore: queryScore != null ? contentScore - queryScore : null,
       checks,
       geuChecks,

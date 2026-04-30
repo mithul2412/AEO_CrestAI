@@ -32,9 +32,14 @@ const DEFAULT_TIMEOUT_MS = 45_000
 export function getOpenRouterCredentials(env = process.env) {
   return [
     { label: 'primary', apiKey: env.OPENROUTER_API_KEY },
+    { label: '24', apiKey: env.OPENROUTER_API_KEY_24 },
     { label: 'uw-mail', apiKey: env.OPENROUTER_API_KEY_UW_MAIL },
     { label: 'personal', apiKey: env.OPENROUTER_API_KEY_PERSONAL },
   ].filter(credential => credential.apiKey)
+}
+
+function openRouterCredentialEnvList() {
+  return 'OPENROUTER_API_KEY, OPENROUTER_API_KEY_24, OPENROUTER_API_KEY_UW_MAIL, or OPENROUTER_API_KEY_PERSONAL'
 }
 
 function parseProviderMessage(rawText = '') {
@@ -78,13 +83,13 @@ function summarizeProviderErrors(model, errors) {
   const rateLimited = errors.filter(error => error.status === 429)
 
   if (exhausted.length === errors.length) {
-    return `All configured OpenRouter API keys are exhausted or lack credits for ${model.label}. Update OPENROUTER_API_KEY, OPENROUTER_API_KEY_UW_MAIL, or OPENROUTER_API_KEY_PERSONAL in backend/.env. Details: ${errors.map(error => error.message).join(' | ')}`
+    return `All configured OpenRouter API keys are exhausted or lack credits for ${model.label}. Update ${openRouterCredentialEnvList()} in backend/.env. Details: ${errors.map(error => error.message).join(' | ')}`
   }
   if (rejected.length === errors.length) {
     return `All configured OpenRouter API keys were rejected for ${model.label}. Check the OpenRouter keys in backend/.env. Details: ${errors.map(error => error.message).join(' | ')}`
   }
   if (rateLimited.length === errors.length) {
-    return `All configured OpenRouter API keys are rate limited for ${model.label}. Wait or update the keys in backend/.env. Details: ${errors.map(error => error.message).join(' | ')}`
+    return `All configured OpenRouter API keys are rate limited for ${model.label}. Wait or update ${openRouterCredentialEnvList()} in backend/.env. Details: ${errors.map(error => error.message).join(' | ')}`
   }
 
   return errors.map(error => error.message).join(' | ')
@@ -127,6 +132,15 @@ export function averageScores(scores) {
   return Math.round(numericScores.reduce((sum, value) => sum + value, 0) / numericScores.length)
 }
 
+export function deriveScoreConfidence({ expected, returned }) {
+  const total = Math.max(0, Number(expected) || 0)
+  const ok = Math.max(0, Number(returned) || 0)
+  if (total === 0) return 'fallback'
+  if (ok >= total) return 'full'
+  if (ok > 0) return 'partial'
+  return 'fallback'
+}
+
 export function truncateForModel(markdown, model) {
   return truncateMarkdown(markdown, model.contextTokens)
 }
@@ -150,6 +164,14 @@ function buildJsonRetryPrompt(prompt) {
 Return exactly one valid minified JSON object. Do not include markdown, commentary, code fences, or incomplete strings.`
 }
 
+function isTransientNetworkStatus(status) {
+  return [408, 429, 500, 502, 503, 504].includes(status)
+}
+
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms))
+}
+
 async function callOpenRouter(model, {
   messages,
   maxTokens = 600,
@@ -159,48 +181,78 @@ async function callOpenRouter(model, {
 }) {
   const credentials = getOpenRouterCredentials()
   if (credentials.length === 0) {
-    throw new Error('Missing OPENROUTER_API_KEY')
+    throw new Error(`Missing ${openRouterCredentialEnvList()}`)
   }
 
   const modelIds = [model.model, ...(model.fallbackModels || [])]
   const errors = []
 
+  modelLoop:
   for (const modelId of modelIds) {
     for (const credential of credentials) {
-      const body = {
-        model: modelId,
-        messages,
-        max_tokens: maxTokens,
-        temperature,
-      }
+      // One transient-status retry per (modelId, credential) pair before we rotate.
+      let lastStatus = null
+      let lastErrorText = ''
+      for (let attempt = 0; attempt < 2; attempt++) {
+        const body = {
+          model: modelId,
+          messages,
+          max_tokens: maxTokens,
+          temperature,
+        }
 
-      if (responseFormat) {
-        body.response_format = responseFormat
-      }
+        if (responseFormat) {
+          body.response_format = responseFormat
+        }
 
-      const res = await fetch(OPENROUTER_URL, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${credential.apiKey}`,
-        },
-        body: JSON.stringify(body),
-        signal: AbortSignal.timeout(timeoutMs),
-      })
+        let res
+        try {
+          res = await fetch(OPENROUTER_URL, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${credential.apiKey}`,
+            },
+            body: JSON.stringify(body),
+            signal: AbortSignal.timeout(timeoutMs),
+          })
+        } catch (networkErr) {
+          if (attempt === 0) {
+            await sleep(250)
+            continue
+          }
+          errors.push({
+            status: 0,
+            message: `${model.label} (${modelId}, ${credential.label}) network error: ${networkErr?.message || networkErr}`,
+          })
+          lastStatus = 0
+          break
+        }
 
-      if (res.ok) {
-        const data = await res.json()
-        return { data, modelId, credentialLabel: credential.label }
-      }
+        if (res.ok) {
+          const data = await res.json()
+          return { data, modelId, credentialLabel: credential.label }
+        }
 
-      const errorText = await res.text()
-      errors.push({
-        status: res.status,
-        message: buildProviderError({ ...model, label: `${model.label} (${modelId}, ${credential.label})` }, res.status, errorText),
-      })
-
-      if (!isRetryableProviderStatus(res.status)) {
+        lastStatus = res.status
+        lastErrorText = await res.text()
+        if (isTransientNetworkStatus(res.status) && attempt === 0) {
+          await sleep(250)
+          continue
+        }
         break
+      }
+
+      if (lastStatus && lastStatus !== 0) {
+        errors.push({
+          status: lastStatus,
+          message: buildProviderError({ ...model, label: `${model.label} (${modelId}, ${credential.label})` }, lastStatus, lastErrorText),
+        })
+      }
+
+      if (lastStatus && !isRetryableProviderStatus(lastStatus)) {
+        // Non-retryable (e.g. 413 too-large): skip remaining credentials, try next modelId.
+        continue modelLoop
       }
     }
   }
@@ -334,19 +386,29 @@ export async function runSingleJsonModel({
   }
 }
 
+export function selectChatModels(selectedLabels) {
+  if (!Array.isArray(selectedLabels) || selectedLabels.length === 0) {
+    return OPENROUTER_MODELS
+  }
+  const wanted = new Set(selectedLabels.map(label => String(label).toLowerCase()))
+  const filtered = OPENROUTER_MODELS.filter(model => wanted.has(model.label.toLowerCase()) || wanted.has(model.id.toLowerCase()))
+  return filtered.length > 0 ? filtered : OPENROUTER_MODELS
+}
+
 export async function runChatModelPanel({
   messages,
   systemContent = '',
   maxTokens = 1200,
   temperature = 0.5,
   timeoutMs = DEFAULT_TIMEOUT_MS,
+  models = OPENROUTER_MODELS,
 }) {
   const allMessages = systemContent
     ? [{ role: 'system', content: systemContent }, ...messages]
     : messages
 
   const settled = await Promise.allSettled(
-    OPENROUTER_MODELS.map(async model => {
+    models.map(async model => {
       const { data, modelId, credentialLabel } = await callOpenRouter(model, {
         messages: allMessages,
         maxTokens,
@@ -367,6 +429,6 @@ export async function runChatModelPanel({
     responses: settled
       .filter(result => result.status === 'fulfilled')
       .map(result => result.value),
-    status: settled.map((result, index) => mapModelStatus(result, OPENROUTER_MODELS[index])),
+    status: settled.map((result, index) => mapModelStatus(result, models[index])),
   }
 }

@@ -28,9 +28,8 @@ Score guide:
 - 51-70: moderately ready
 - 71-100: strong GEO-ready content`
 
-export const QUERY_SUGGESTION_PROMPT = `You are an AEO (Answer Engine Optimization) strategist.
+const QUERY_SUGGESTION_BASE = `You are an AEO (Answer Engine Optimization) strategist.
 Given a webpage's markdown content and page metadata, suggest target queries that a content team should test for AI citation readiness.
-The queries should be realistic user questions, specific to this page, and useful for evaluating whether the page deserves to be cited by an answer engine.
 Return ONLY valid JSON with no extra text:
 {
   "queries": [
@@ -39,12 +38,62 @@ Return ONLY valid JSON with no extra text:
     "<question 3>"
   ]
 }
-Rules:
+Hard rules:
 - Return exactly 3 questions.
-- Each question must be under 90 characters.
-- Do not use generic placeholders like "this product" unless the page itself is generic.
-- Prefer commercial, comparison, pricing, plan, feature, or how-it-works questions when the page supports them.
-- Avoid duplicate intent across the three questions.`
+- Each question must be under 90 characters and end with "?".
+- Each question must be specific to THIS page's actual subject (use the page's title/H1 vocabulary).
+- Do not use generic placeholders like "this product" or "this page".
+- Avoid duplicate intent across the three questions.
+- Question #1 MUST mention the page's brand or product name explicitly (the named-entity test).
+- Questions #2 and #3 MUST be category-level questions that DO NOT name the brand — they test whether this page would be cited as the answer to a generic "best <category>" / "<category> for <audience>" / "what is the best <category>" question. Example: a BMW 3-Series page should produce one named query like "Is the BMW 3-Series reliable?" and two category queries like "best german sports sedan?" and "best luxury sedan for daily driving?".`
+
+const QUERY_SUGGESTION_REFERENCE = `You are an AEO (Answer Engine Optimization) strategist.
+This page is a definition / reference / glossary / docs page. The reader is trying to LEARN a concept, not buy a product.
+Return ONLY valid JSON with no extra text:
+{
+  "queries": [
+    "<question 1>",
+    "<question 2>",
+    "<question 3>"
+  ]
+}
+Hard rules:
+- Return exactly 3 questions.
+- Each question must be under 90 characters and end with "?".
+- Each question must be specific to THIS page's actual concept (use the page's title/H1 vocabulary).
+- DO NOT generate brand, buyer, pricing, plan, vendor-comparison, or "alternatives to X" questions.
+- Generate three questions a learner or developer would actually search:
+  (1) a definitional question — "What is X?" or "What does X mean?"
+  (2) a how/why mechanism question — "How does X work?" or "Why does X exist?"
+  (3) a comparative question against an adjacent concept — "X vs Y" where Y is the most directly related concept (NOT a vendor).`
+
+const QUERY_SUGGESTION_FAQ = `${QUERY_SUGGESTION_BASE}
+This page is an FAQ or Q&A. Generate three high-intent questions that mirror the actual questions on the page, but rephrased the way a real searcher would phrase them.`
+
+const QUERY_SUGGESTION_COMPARISON = `${QUERY_SUGGESTION_BASE}
+This page compares products/options. Generate three buyer-intent comparison questions: head-to-head, decision-criteria, and category-best.`
+
+const QUERY_SUGGESTION_PRICING = `${QUERY_SUGGESTION_BASE}
+This page is about pricing or plans. Generate three buyer-intent questions: cost, plan-fit, and value-justification.`
+
+const QUERY_SUGGESTION_COMMERCIAL = `${QUERY_SUGGESTION_BASE}
+This is a commercial product or service page. Prefer commercial, comparison, pricing, plan, feature, or how-it-works questions.`
+
+export const QUERY_SUGGESTION_PROMPTS = {
+  reference: QUERY_SUGGESTION_REFERENCE,
+  faq: QUERY_SUGGESTION_FAQ,
+  comparison: QUERY_SUGGESTION_COMPARISON,
+  pricing: QUERY_SUGGESTION_PRICING,
+  product: QUERY_SUGGESTION_COMMERCIAL,
+  commercial: QUERY_SUGGESTION_COMMERCIAL,
+}
+
+export function getQuerySuggestionPrompt(pageType = 'commercial') {
+  return QUERY_SUGGESTION_PROMPTS[pageType] || QUERY_SUGGESTION_COMMERCIAL
+}
+
+// Back-compat: legacy single-prompt export still used by some callers/tests.
+export const QUERY_SUGGESTION_PROMPT = QUERY_SUGGESTION_COMMERCIAL
 
 export const DYNAMIC_FIX_PROMPT = `You are an AEO (Answer Engine Optimization) rewrite strategist.
 Given a target query, scoring diagnostics, model verdicts, and the best retrieved page chunks, recommend the single highest-impact fix that would make the page more likely to be cited by an AI answer engine.
