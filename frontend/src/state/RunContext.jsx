@@ -63,7 +63,7 @@ export function RunProvider({ children }) {
   const [error, setError] = useState('')
   const [theme, setTheme] = useState(getInitialTheme)
   const [chatDraft, setChatDraft] = useState({ text: '', token: 0 })
-  const [competitorQuery, setCompetitorQuery] = useState(null)
+  const [competitorQueries, setCompetitorQueries] = useState(null)
   const [competitorQueryLoading, setCompetitorQueryLoading] = useState(false)
   const [querySuggestions, setQuerySuggestions] = useState([])
   const [querySuggestionsLoading, setQuerySuggestionsLoading] = useState(false)
@@ -123,7 +123,7 @@ export function RunProvider({ children }) {
   const handleBaselineAnalyze = useCallback(async (nextMarkdown, nextSourceSignals = {}, nextPageIntelligence = null, nextNormalizedUrl = '') => {
     setContentAnalyzing(true)
     setError('')
-    setCompetitorQuery(null)
+    setCompetitorQueries(null)
     setCompetitorQueryLoading(true)
     try {
       const res = await fetch('/analyze', {
@@ -154,7 +154,7 @@ export function RunProvider({ children }) {
       }),
     })
       .then(r => r.json())
-      .then(d => { if (d.query) setCompetitorQuery(d.query) })
+      .then(d => { if (Array.isArray(d.queries) && d.queries.length) setCompetitorQueries(d.queries) })
       .catch(() => {})
       .finally(() => setCompetitorQueryLoading(false))
   }, [generateQuerySuggestions])
@@ -219,7 +219,7 @@ export function RunProvider({ children }) {
     setResults(null)
     setError('')
     setChatDraft({ text: '', token: 0 })
-    setCompetitorQuery(null)
+    setCompetitorQueries(null)
     setCompetitorQueryLoading(false)
   }, [])
 
@@ -238,7 +238,7 @@ export function RunProvider({ children }) {
     query, theme, baselineResults, results, activeResults,
     contentAnalyzing, queryAnalyzing, error,
     chatDraft, querySuggestions, querySuggestionsLoading, querySuggestionsMeta,
-    competitorQuery, competitorQueryLoading,
+    competitorQueries, competitorQueryLoading,
 
     // derived
     hasFetched, hasBaseline, hasQueryResults,
@@ -253,7 +253,7 @@ export function RunProvider({ children }) {
     url, normalizedUrl, markdown, charCount, sourceSignals, pageIntelligence,
     query, theme, baselineResults, results, activeResults,
     contentAnalyzing, queryAnalyzing, error, chatDraft, querySuggestions, querySuggestionsLoading, querySuggestionsMeta,
-    competitorQuery, competitorQueryLoading,
+    competitorQueries, competitorQueryLoading,
     hasFetched, hasBaseline, hasQueryResults,
     handleFetchComplete, handleAnalyze, handleBaselineAnalyze, generateQuerySuggestions,
     startNewTest, sendDraftToChat,
