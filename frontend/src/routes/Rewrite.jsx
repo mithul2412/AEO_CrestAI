@@ -3,7 +3,7 @@ import { useRun } from '../state/RunContext.jsx'
 import { LockedBlock } from '../components/primitives/StateBlocks.jsx'
 
 export default function Rewrite() {
-  const { hasFetched, markdown, query, results, chatDraft } = useRun()
+  const { hasFetched, markdown, query, results, chatDraft, pageIntelligence } = useRun()
 
   if (!hasFetched) {
     return (
@@ -19,22 +19,24 @@ export default function Rewrite() {
     : query.trim()
       ? 'post-query'
       : 'post-fetch'
+  const fix = results?.intelligence?.highestImpactFix
+  const fixSource = fix?.fallback
+    ? 'Fallback fix'
+    : fix?.model
+      ? fix.model
+      : fix?.source === 'model-verdict'
+        ? 'Model verdict'
+        : ''
 
   return (
-    <section className="section">
-      <div className="section__head">
-        <div className="section__head-titles">
-          <span className="kicker">Rewrite Help</span>
-          <h2 className="h-2">Turn the diagnosis into better page copy.</h2>
-        </div>
-      </div>
-      <Chat
-        markdown={markdown}
-        stage={stage}
-        query={query.trim()}
-        draft={chatDraft.text}
-        draftToken={chatDraft.token}
-      />
-    </section>
+    <Chat
+      markdown={markdown}
+      stage={stage}
+      query={query.trim()}
+      draft={chatDraft.text}
+      draftToken={chatDraft.token}
+      pageIntelligence={pageIntelligence}
+      fixSource={fixSource}
+    />
   )
 }

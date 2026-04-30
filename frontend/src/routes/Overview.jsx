@@ -13,20 +13,6 @@ import {
   getFixFirstCopy,
 } from '../utils/diagnosticBrief.js'
 
-const QUERY_TIPS = (rawUrl) => {
-  let brand = 'this product'
-  try {
-    const u = new URL(/^https?:/.test(rawUrl) ? rawUrl : `https://${rawUrl}`)
-    const base = u.hostname.replace(/^www\./, '').split('.')[0]
-    if (base) brand = base[0].toUpperCase() + base.slice(1)
-  } catch {}
-  return [
-    `What is ${brand} pricing?`,
-    `How does ${brand} compare to competitors?`,
-    `What are the main ${brand} plans?`,
-  ]
-}
-
 function baselineVerdict(score) {
   if (typeof score !== 'number') return { word: '—', tone: 'muted', summary: 'Fetch a page to read the baseline.' }
   if (score >= 75) return { word: 'Ready', tone: 'ok', summary: 'The page passed the baseline read. Add a target query to test citation fit.' }
@@ -73,9 +59,11 @@ export default function Overview() {
     query, setQuery, handleAnalyze, queryAnalyzing, hasBaseline, hasQueryResults,
     url, normalizedUrl, sendDraftToChat,
     handleBaselineAnalyze, sourceSignals,
+    querySuggestions, querySuggestionsLoading, querySuggestionsMeta, generateQuerySuggestions,
   } = useRun()
 
   const [drillKey, setDrillKey] = useState(null)
+  const [signalView, setSignalView] = useState('blockers')
 
   if (!hasFetched) return <FocusGate />
 
@@ -257,8 +245,6 @@ export default function Overview() {
     return null
   })()
 
-  const tips = QUERY_TIPS(url)
-
   return (
     <>
       <section className="hero">
@@ -320,35 +306,50 @@ export default function Overview() {
       </section>
 
       <section className="section">
-        <div className="split-2">
-          <div className="list">
-            <div className="list__head">
-              <span className="kicker">Strengths</span>
-              <span className="caption">{strengths.length} signals holding the page up</span>
-            </div>
-            {strengths.length ? strengths.map(s => (
-              <div key={s.id} className="list__row list__row--ok">
-                <span className="list__row-marker">+{s.weight}</span>
-                <span className="list__row-text">{s.label}</span>
-              </div>
-            )) : (
-              <div className="list__row"><span className="list__row-marker">—</span><span className="list__row-text muted">No strong baseline signal yet.</span></div>
-            )}
+        <div className="section__head">
+          <div className="section__head-titles">
+            <span className="kicker">Signals</span>
+            <h2 className="h-2">{signalView === 'blockers' ? 'What is holding the page back.' : 'What the page is doing well.'}</h2>
           </div>
-          <div className="list">
-            <div className="list__head">
-              <span className="kicker">Blockers</span>
-              <span className="caption">{blockers.length} gaps closest to the surface</span>
-            </div>
-            {blockers.length ? blockers.map(b => (
+          <div className="signal-toggle" role="group" aria-label="Signal view">
+            <button
+              type="button"
+              aria-pressed={signalView === 'blockers'}
+              className={`signal-toggle__btn${signalView === 'blockers' ? ' signal-toggle__btn--active' : ''}`}
+              onClick={() => setSignalView('blockers')}
+            >
+              Blockers · {blockers.length}
+            </button>
+            <button
+              type="button"
+              aria-pressed={signalView === 'strengths'}
+              className={`signal-toggle__btn${signalView === 'strengths' ? ' signal-toggle__btn--active' : ''}`}
+              onClick={() => setSignalView('strengths')}
+            >
+              Strengths · {strengths.length}
+            </button>
+          </div>
+        </div>
+        <div className="list">
+          {signalView === 'blockers' ? (
+            blockers.length ? blockers.map(b => (
               <div key={b.id} className="list__row list__row--danger">
                 <span className="list__row-marker">−{b.weight}</span>
                 <span className="list__row-text">{b.label}</span>
               </div>
             )) : (
               <div className="list__row"><span className="list__row-marker">—</span><span className="list__row-text muted">No major blocker detected.</span></div>
-            )}
-          </div>
+            )
+          ) : (
+            strengths.length ? strengths.map(s => (
+              <div key={s.id} className="list__row list__row--ok">
+                <span className="list__row-marker">+{s.weight}</span>
+                <span className="list__row-text">{s.label}</span>
+              </div>
+            )) : (
+              <div className="list__row"><span className="list__row-marker">—</span><span className="list__row-text muted">No strong baseline signal yet.</span></div>
+            )
+          )}
         </div>
       </section>
 
@@ -388,6 +389,7 @@ export default function Overview() {
               </div>
               <h3 className="fix-card__title">{fixCopy.headline}</h3>
               <p className="fix-card__reason">{fixCopy.reason}</p>
+              {fixCopy.meta && <p className="caption">{fixCopy.meta}</p>}
             </div>
             <div className="hstack">
               <button className="btn btn--ghost btn--sm" onClick={() => navigate('/diagnostics')}>Open in Diagnostics</button>
@@ -405,83 +407,74 @@ export default function Overview() {
         </section>
       )}
 
-      {!hasQueryResults && (
-        <section className="section">
-          <div className="section__head">
-            <div className="section__head-titles">
-              <span className="kicker">Step three · Query test</span>
-              <h2 className="h-2">Run a target query to unlock the answer path.</h2>
-            </div>
+      <section className="section">
+        <div className="section__head">
+          <div className="section__head-titles">
+            <span className="kicker">{hasQueryResults ? 'Test another query' : 'Step three · Query test'}</span>
+            <h2 className="h-2">
+              {hasQueryResults
+                ? 'Re-run with a different target question.'
+                : 'Run a target query to unlock the answer path.'}
+            </h2>
           </div>
-          <div className="panel">
-            <div className="vstack" style={{ gap: 8 }}>
+        </div>
+        <div className="panel">
+          <div className="vstack" style={{ gap: 8 }}>
+            {!hasQueryResults && (
               <span className="caption">Baseline complete. Enter the question this page needs to answer for a citation engine.</span>
-              <div className="query-row">
-                <input
-                  className="query-row__input"
-                  placeholder="e.g. what is the best CRM for small business?"
-                  value={query}
-                  onChange={e => setQuery(e.target.value)}
-                  onKeyDown={e => {
-                    if (e.key === 'Enter') {
-                      e.preventDefault()
-                      if (!queryAnalyzing && query.trim() && hasBaseline) handleAnalyze()
-                    }
-                  }}
-                />
-                <button
-                  type="button"
-                  className="btn"
-                  onClick={handleAnalyze}
-                  disabled={queryAnalyzing || !query.trim() || !hasBaseline}
-                >
-                  {queryAnalyzing ? 'Analyzing…' : 'Run query test'}
-                </button>
-              </div>
-              <div className="suggestion-row">
-                {tips.map(tip => (
-                  <button key={tip} className="chip" onClick={() => setQuery(tip)}>{tip}</button>
-                ))}
-              </div>
-              {error && <div className="error-bar">{error}</div>}
-            </div>
-          </div>
-        </section>
-      )}
-
-      {hasQueryResults && (
-        <section className="section">
-          <div className="section__head">
-            <div className="section__head-titles">
-              <span className="kicker">Re-run</span>
-              <h2 className="h-2">Test a different question.</h2>
-            </div>
-          </div>
-          <div className="panel">
-            <div className="query-row" style={{ marginTop: 0 }}>
+            )}
+            <div className="query-row">
               <input
                 className="query-row__input"
+                placeholder="e.g. what is the best CRM for small business?"
                 value={query}
                 onChange={e => setQuery(e.target.value)}
                 onKeyDown={e => {
-                if (e.key === 'Enter') {
-                  e.preventDefault()
-                  if (!queryAnalyzing && query.trim()) handleAnalyze()
-                }
-              }}
+                  if (e.key === 'Enter') {
+                    e.preventDefault()
+                    if (!queryAnalyzing && query.trim() && hasBaseline) handleAnalyze()
+                  }
+                }}
               />
               <button
                 type="button"
                 className="btn"
                 onClick={handleAnalyze}
-                disabled={queryAnalyzing || !query.trim()}
+                disabled={queryAnalyzing || !query.trim() || !hasBaseline}
               >
-                {queryAnalyzing ? 'Analyzing…' : 'Re-run query'}
+                {queryAnalyzing ? 'Analyzing…' : hasQueryResults ? 'Re-run query' : 'Run query test'}
               </button>
             </div>
+            {!hasQueryResults && (
+              <>
+                <div className="suggestion-row">
+                  {querySuggestionsLoading && (
+                    <span className="caption">Generating target queries with Llama 3.3 70B…</span>
+                  )}
+                  {!querySuggestionsLoading && querySuggestions.map(tip => (
+                    <button key={tip} className="chip" onClick={() => setQuery(tip)}>{tip}</button>
+                  ))}
+                  {!querySuggestionsLoading && querySuggestionsMeta?.fallback && (
+                    <button
+                      type="button"
+                      className="chip"
+                      onClick={() => generateQuerySuggestions(markdown, pageIntelligence, normalizedUrl || url)}
+                    >
+                      Retry Llama suggestions
+                    </button>
+                  )}
+                </div>
+                {!querySuggestionsLoading && querySuggestionsMeta?.model && (
+                  <span className="caption">
+                    Suggested by {querySuggestionsMeta.model}{querySuggestionsMeta.fallback ? ' fallback' : ''}.
+                  </span>
+                )}
+              </>
+            )}
+            {error && <div className="error-bar">{error}</div>}
           </div>
-        </section>
-      )}
+        </div>
+      </section>
 
       <DrillDrawer
         open={!!drill}

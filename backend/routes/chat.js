@@ -1,12 +1,12 @@
 import { Router } from 'express'
-import { truncateMarkdown } from '../utils/truncate.js'
 import { runChatModelPanel } from '../services/openRouterModels.js'
+import { packContextForChat } from '../services/contextPacker.js'
 
 const router = Router()
 
 router.post('/', async (req, res) => {
   try {
-    const { messages, markdown, query = '' } = req.body || {}
+    const { messages, markdown, query = '', pageIntelligence = {} } = req.body || {}
 
     if (!messages || !Array.isArray(messages) || messages.length === 0) {
       return res.status(400).json({ error: 'messages array required' })
@@ -15,8 +15,11 @@ router.post('/', async (req, res) => {
     const queryContext = query?.trim()
       ? `\n\nTarget query: ${query.trim()}`
       : ''
+    const packed = markdown
+      ? packContextForChat({ markdown, query, pageIntelligence, budgetTokens: 3000 })
+      : ''
     const systemContent = markdown
-      ? `You are an AEO (Answer Engine Optimization) expert assistant. The user is analyzing the following webpage content:${queryContext}\n\n${truncateMarkdown(markdown, 3000)}\n\nHelp them improve their content for AI answer engines with concrete, high-impact suggestions.`
+      ? `You are an AEO (Answer Engine Optimization) expert assistant. The user is analyzing the following webpage. The context below is a relevance-packed sample (page skeleton + most relevant chunks for the target query when present), not the full page.${queryContext}\n\n${packed}\n\nGround every suggestion in the packed context. When you reference content, cite the chunk id (e.g. c2) shown in the headers. Be concrete, specific, and high-impact.`
       : 'You are an AEO (Answer Engine Optimization) expert assistant. Help users improve their content for AI answer engines.'
 
     const panel = await runChatModelPanel({ messages, systemContent })

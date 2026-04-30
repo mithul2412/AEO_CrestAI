@@ -51,11 +51,54 @@ const QUERY_RESPONSE = {
   llmContentModels: [],
   llmContentStatus: [],
   intelligence: {
+    citationReadiness: {
+      score: 61,
+      summary: 'Answer path needs clearer proof.',
+      subscores: { retrievalScore: 62, answerScore: 55, evidenceScore: 44, structureScore: 80 },
+    },
     retrieval: {
       retrievalScore: 62,
       topChunks: [{ chunkId: 'c1', section: 'Intro', text: 'Content text here.', similarity: 0.72, position: 0.1, wordCount: 3, directAnswer: false }],
     },
+    answerExtraction: {
+      answerScore: 55,
+      diagnosis: 'Answer is implied but not quotable.',
+      subscores: { directnessScore: 50, evidenceScore: 44 },
+    },
+    competitorMap: {
+      status: 'disabled',
+      reason: 'TAVILY_API_KEY is missing',
+      angles: [],
+      competitors: [],
+      grouped: {},
+      yourPresence: null,
+      marketSummary: {
+        searchedAngles: '0/0',
+        visibleCompetitors: 0,
+        sourceDomainPresence: 'Source domain was not evaluated.',
+        topLeader: null,
+        recommendedMove: 'TAVILY_API_KEY is missing',
+      },
+    },
+    competitorIntelligence: { status: 'disabled', competitors: [], gap: null },
+    highestImpactFix: {
+      failureMode: 'Answer Failure',
+      fix: 'Add a direct answer block.',
+      why: 'The page only implies the answer.',
+      whereToEdit: 'Intro',
+      confidence: 'medium',
+    },
   },
+}
+
+const QUERY_SUGGESTIONS_RESPONSE = {
+  queries: [
+    'What is Test page best for?',
+    'How does Test page compare to alternatives?',
+    'What should buyers know about Test page?',
+  ],
+  model: 'Llama 3.3 70B Instruct',
+  fallback: false,
 }
 
 describe('App shell', () => {
@@ -96,6 +139,7 @@ describe('App workflow integration', () => {
     fetch
       .mockResolvedValueOnce(createJsonResponse(FETCH_RESPONSE))
       .mockResolvedValueOnce(createJsonResponse(BASELINE_RESPONSE))
+      .mockResolvedValueOnce(createJsonResponse(QUERY_SUGGESTIONS_RESPONSE))
 
     render(<App />)
 
@@ -108,6 +152,7 @@ describe('App workflow integration', () => {
     // so only one "Run query test" button exists in Overview at this point.
     const initialRunBtn = await screen.findByRole('button', { name: /Run query test/i })
     expect(initialRunBtn).toBeDisabled()
+    await screen.findByRole('button', { name: /What is Test page best for/i })
 
     // Typing a query makes RunHeader also show "Run query test".
     // Pick the last matching button, which is the Overview analyze button.
@@ -125,10 +170,40 @@ describe('App workflow integration', () => {
     expect(screen.queryByPlaceholderText(/e\.g\./i)).not.toBeInTheDocument()
   })
 
+  it('renders Diagnostics tabs after query scoring', async () => {
+    fetch
+      .mockResolvedValueOnce(createJsonResponse(FETCH_RESPONSE))
+      .mockResolvedValueOnce(createJsonResponse(BASELINE_RESPONSE))
+      .mockResolvedValueOnce(createJsonResponse(QUERY_SUGGESTIONS_RESPONSE))
+
+    render(<App />)
+
+    fireEvent.change(screen.getByPlaceholderText(/example.com/), {
+      target: { value: 'example.com' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: /Fetch Page/i }))
+
+    await screen.findByRole('button', { name: /Run query test/i })
+    fireEvent.change(screen.getByPlaceholderText(/e\.g\./i), {
+      target: { value: 'what is this page about?' },
+    })
+    fetch.mockResolvedValueOnce(createJsonResponse(QUERY_RESPONSE))
+    fireEvent.click(screen.getAllByRole('button', { name: /Run query test/i }).at(-1))
+
+    await screen.findByRole('button', { name: /Re-run query/i })
+    fireEvent.click(screen.getByRole('link', { name: /Diagnostics/i }))
+
+    expect(await screen.findByRole('tab', { name: /Verdict & Fix/i })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: /Answer Path/i })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: /Competitor Map/i })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: /Model Reads/i })).toBeInTheDocument()
+  })
+
   it('Enter key in initial query input is gated by baseline/query conditions', async () => {
     fetch
       .mockResolvedValueOnce(createJsonResponse(FETCH_RESPONSE))
       .mockResolvedValueOnce(createJsonResponse(BASELINE_RESPONSE))
+      .mockResolvedValueOnce(createJsonResponse(QUERY_SUGGESTIONS_RESPONSE))
 
     render(<App />)
 
@@ -144,7 +219,7 @@ describe('App workflow integration', () => {
 
     // Empty query — Enter must not trigger analyze (still 2 calls total).
     fireEvent.keyDown(queryInput, { key: 'Enter' })
-    await waitFor(() => expect(fetch).toHaveBeenCalledTimes(2))
+    await waitFor(() => expect(fetch).toHaveBeenCalledTimes(3))
 
     // Non-empty query — Enter should trigger analyze.
     fireEvent.change(queryInput, { target: { value: 'test query' } })
@@ -152,7 +227,7 @@ describe('App workflow integration', () => {
     fireEvent.keyDown(queryInput, { key: 'Enter' })
 
     await screen.findByRole('button', { name: /Re-run query/i })
-    expect(fetch).toHaveBeenCalledTimes(3)
+    expect(fetch).toHaveBeenCalledTimes(4)
   })
 
   it('shows an error message when baseline analysis fails', async () => {
