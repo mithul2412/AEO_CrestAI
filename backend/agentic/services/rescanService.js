@@ -4,6 +4,7 @@ import { computeEngineReadiness } from './engineReadinessService.js'
 import { extractCanonicalProfile } from './profileExtractor.js'
 import { detectProfileChanges, resolveAffectedArtifacts } from './changeDetectionService.js'
 import { createApprovalRequestForChanges } from './approvalWorkflowService.js'
+import { buildRescanFeedback } from './rescanFeedbackService.js'
 import { getHostedProfileUrl } from '../generators/alternateLinkGenerator.js'
 import { fetchPageMarkdown } from '../../routes/fetch.js'
 import {
@@ -131,6 +132,15 @@ export async function rescanAgenticProfile(slug, body = {}) {
       previous: record.monitoring,
     })
     updateProfileMonitoring(slug, nextMonitoring)
+    const feedback = await buildRescanFeedback({
+      status: 'no_changes',
+      mode: resolved.mode,
+      record,
+      pendingProfile,
+      changes: [],
+      affectedArtifacts: [],
+      validation,
+    })
     return {
       status: 'no_changes',
       changed: false,
@@ -142,6 +152,7 @@ export async function rescanAgenticProfile(slug, body = {}) {
       validation,
       engineReadiness,
       monitoring: nextMonitoring,
+      feedback,
     }
   }
 
@@ -164,6 +175,15 @@ export async function rescanAgenticProfile(slug, body = {}) {
       previous: record.monitoring,
     })
     updateProfileMonitoring(slug, nextMonitoring)
+    const feedback = await buildRescanFeedback({
+      status: 'approval_required',
+      mode: resolved.mode,
+      record,
+      pendingProfile,
+      changes: changeEvents,
+      affectedArtifacts,
+      validation,
+    })
 
     return {
       status: 'approval_required',
@@ -177,6 +197,7 @@ export async function rescanAgenticProfile(slug, body = {}) {
       engineReadiness,
       approval,
       monitoring: nextMonitoring,
+      feedback,
     }
   }
 
@@ -194,6 +215,15 @@ export async function rescanAgenticProfile(slug, body = {}) {
     changeEvents,
     monitoring: nextMonitoring,
   })
+  const feedback = await buildRescanFeedback({
+    status: 'auto_published',
+    mode: resolved.mode,
+    record,
+    pendingProfile,
+    changes: changeEvents,
+    affectedArtifacts,
+    validation,
+  })
 
   return {
     status: 'auto_published',
@@ -207,5 +237,6 @@ export async function rescanAgenticProfile(slug, body = {}) {
     engineReadiness,
     publishedProfile,
     monitoring: nextMonitoring,
+    feedback,
   }
 }

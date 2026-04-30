@@ -1946,6 +1946,19 @@ a { color: inherit; text-decoration: none; }
 .approval-event-main span { font-family: var(--font-mono); font-size: 11px; color: var(--muted); }
 .approval-event small { font-size: 12px; color: var(--muted); }
 
+.agentic-feedback {
+  display: flex; flex-direction: column; gap: var(--s-2);
+  padding: var(--s-3); background: var(--subtle);
+  border: 1px solid var(--line); border-radius: var(--r-2);
+}
+.agentic-feedback-head {
+  display: flex; align-items: flex-start; justify-content: space-between; gap: var(--s-3);
+}
+.agentic-feedback p {
+  margin: 0; white-space: pre-line; color: var(--ink-2); font-size: 13px; line-height: 1.55;
+}
+.agentic-feedback small { color: var(--muted); font-size: 12px; }
+
 .approval-list { display: flex; flex-direction: column; gap: var(--s-3); }
 .approval-card {
   display: flex; flex-direction: column; gap: var(--s-3);
