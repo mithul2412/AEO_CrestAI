@@ -136,7 +136,7 @@ function VerdictTab({ citation, fix, sendFixToRewrite }) {
       </section>
 
       <section className="section">
-        <div className="section__head">
+        <div className="section__head section__head--fix">
           <div className="section__head-titles">
             <span className="kicker">Highest-impact fix</span>
             <h2 className="h-2">{fix?.fix || 'A prioritized fix will appear after query scoring.'}</h2>

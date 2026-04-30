@@ -32,9 +32,14 @@ const DEFAULT_TIMEOUT_MS = 45_000
 export function getOpenRouterCredentials(env = process.env) {
   return [
     { label: 'primary', apiKey: env.OPENROUTER_API_KEY },
+    { label: '24', apiKey: env.OPENROUTER_API_KEY_24 },
     { label: 'uw-mail', apiKey: env.OPENROUTER_API_KEY_UW_MAIL },
     { label: 'personal', apiKey: env.OPENROUTER_API_KEY_PERSONAL },
   ].filter(credential => credential.apiKey)
+}
+
+function openRouterCredentialEnvList() {
+  return 'OPENROUTER_API_KEY, OPENROUTER_API_KEY_24, OPENROUTER_API_KEY_UW_MAIL, or OPENROUTER_API_KEY_PERSONAL'
 }
 
 function parseProviderMessage(rawText = '') {
@@ -78,13 +83,13 @@ function summarizeProviderErrors(model, errors) {
   const rateLimited = errors.filter(error => error.status === 429)
 
   if (exhausted.length === errors.length) {
-    return `All configured OpenRouter API keys are exhausted or lack credits for ${model.label}. Update OPENROUTER_API_KEY, OPENROUTER_API_KEY_UW_MAIL, or OPENROUTER_API_KEY_PERSONAL in backend/.env. Details: ${errors.map(error => error.message).join(' | ')}`
+    return `All configured OpenRouter API keys are exhausted or lack credits for ${model.label}. Update ${openRouterCredentialEnvList()} in backend/.env. Details: ${errors.map(error => error.message).join(' | ')}`
   }
   if (rejected.length === errors.length) {
     return `All configured OpenRouter API keys were rejected for ${model.label}. Check the OpenRouter keys in backend/.env. Details: ${errors.map(error => error.message).join(' | ')}`
   }
   if (rateLimited.length === errors.length) {
-    return `All configured OpenRouter API keys are rate limited for ${model.label}. Wait or update the keys in backend/.env. Details: ${errors.map(error => error.message).join(' | ')}`
+    return `All configured OpenRouter API keys are rate limited for ${model.label}. Wait or update ${openRouterCredentialEnvList()} in backend/.env. Details: ${errors.map(error => error.message).join(' | ')}`
   }
 
   return errors.map(error => error.message).join(' | ')
@@ -159,7 +164,7 @@ async function callOpenRouter(model, {
 }) {
   const credentials = getOpenRouterCredentials()
   if (credentials.length === 0) {
-    throw new Error('Missing OPENROUTER_API_KEY')
+    throw new Error(`Missing ${openRouterCredentialEnvList()}`)
   }
 
   const modelIds = [model.model, ...(model.fallbackModels || [])]
