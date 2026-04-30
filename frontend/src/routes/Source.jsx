@@ -12,9 +12,9 @@ const CRAWLER_LABEL = {
 }
 
 function statusValue(value) {
-  if (value === true) return { label: 'Allowed', tone: 'ok' }
-  if (value === false) return { label: 'Blocked', tone: 'danger' }
-  if (value == null) return { label: 'Unknown', tone: 'muted' }
+  if (value === 'allowed' || value === true) return { label: 'Allowed', tone: 'ok' }
+  if (value === 'blocked' || value === false) return { label: 'Blocked', tone: 'danger' }
+  if (value === 'unknown' || value == null) return { label: 'Unknown', tone: 'muted' }
   return { label: String(value), tone: 'muted' }
 }
 
