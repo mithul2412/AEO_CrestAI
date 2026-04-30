@@ -3,7 +3,7 @@ import { useRun } from '../state/RunContext.jsx'
 import { LockedBlock } from '../components/primitives/StateBlocks.jsx'
 
 export default function Agentic() {
-  const { hasFetched, hasBaseline, url, markdown, query, activeResults, sourceSignals } = useRun()
+  const { hasFetched, hasBaseline, url, markdown, query, activeResults, sourceSignals, demoMode, demoSnapshot } = useRun()
 
   if (!hasFetched) {
     return (
@@ -37,6 +37,8 @@ export default function Agentic() {
         query={query}
         analysis={activeResults}
         sourceSignals={sourceSignals}
+        initialResult={demoSnapshot?.agenticResult || null}
+        demoMode={demoMode}
       />
     </section>
   )

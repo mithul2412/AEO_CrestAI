@@ -33,6 +33,7 @@ export default function RunHeader() {
   const {
     normalizedUrl, url, query, activeResults,
     contentAnalyzing, queryAnalyzing, hasFetched, hasQueryResults,
+    demoMode,
   } = useRun()
 
   const displayUrl = shortenUrl(normalizedUrl || url)
@@ -76,6 +77,10 @@ export default function RunHeader() {
       </div>
 
       <span className="runheader__spacer" />
+
+      {demoMode && (
+        <span className="pill pill--warn">Demo snapshot</span>
+      )}
 
       {typeof overall === 'number' && (
         <div className="runheader__metric">

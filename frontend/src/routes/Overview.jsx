@@ -219,6 +219,7 @@ export default function Overview() {
     url, normalizedUrl, sendDraftToChat,
     handleBaselineAnalyze, sourceSignals,
     querySuggestions, querySuggestionsLoading, querySuggestionsMeta, generateQuerySuggestions,
+    demoMode,
   } = useRun()
 
   const [drillKey, setDrillKey] = useState(null)
@@ -254,6 +255,7 @@ export default function Overview() {
 
   const overall = activeResults.overallScore
   const verdictBaseline = baselineVerdict(overall)
+  const overallTone = verdictBaseline.tone
   const blockedState = getBlockedPageState(pageIntelligence, markdown)
   const queryVerdict = hasQueryResults
     ? getExecutiveQueryVerdict({ queryScore: results.queryScore, gapScore: results.gapScore, blockedState })
@@ -428,8 +430,8 @@ export default function Overview() {
             {typeof overall === 'number' ? overall : '—'}
             <span className="hero__score-suffix">/100</span>
           </span>
-          <span className={`hero__score-tone hero__score-tone--${verdictTone}`}>
-            {verdictTone === 'ok' ? 'Above the citation bar' : verdictTone === 'warn' ? 'Sits at the risk line' : verdictTone === 'danger' ? 'Below the citation bar' : 'Reading the page'}
+          <span className={`hero__score-tone hero__score-tone--${overallTone}`}>
+            {overallTone === 'ok' ? 'Above the citation bar' : overallTone === 'warn' ? 'Sits at the risk line' : overallTone === 'danger' ? 'Below the citation bar' : 'Reading the page'}
           </span>
           {activeResults?.scoreConfidence && (
             <span
@@ -602,6 +604,9 @@ export default function Overview() {
             {!hasQueryResults && (
               <span className="caption">Baseline complete. Enter the question this page needs to answer for a citation engine.</span>
             )}
+            {demoMode && (
+              <span className="caption">Demo snapshot is read-only. Saved results are shown without backend or API calls.</span>
+            )}
             <div className="query-row">
               <input
                 id="query-input"
@@ -612,15 +617,16 @@ export default function Overview() {
                 onKeyDown={e => {
                   if (e.key === 'Enter') {
                     e.preventDefault()
-                    if (!queryAnalyzing && query.trim() && hasBaseline) handleAnalyze()
+                    if (!demoMode && !queryAnalyzing && query.trim() && hasBaseline) handleAnalyze()
                   }
                 }}
+                disabled={demoMode}
               />
               <button
                 type="button"
                 className="btn"
                 onClick={handleAnalyze}
-                disabled={queryAnalyzing || !query.trim() || !hasBaseline}
+                disabled={demoMode || queryAnalyzing || !query.trim() || !hasBaseline}
               >
                 {queryAnalyzing
                   ? <><WanderingEyes style={{ height: '20px', width: '45px', marginRight: '6px' }} /> Analyzing…</>
