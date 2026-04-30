@@ -144,18 +144,37 @@ export function RunProvider({ children }) {
       setContentAnalyzing(false)
     }
 
+    const sourceUrl = nextNormalizedUrl || nextSourceSignals?.sourceUrl || ''
+
+    function heuristicCompetitorQuery() {
+      const title = nextPageIntelligence?.extraction?.title || nextPageIntelligence?.extraction?.h1 || ''
+      const brand = title
+        .split(/[|–—]/)[0].trim()
+        .replace(/\b(pricing|plans|features|home|homepage|help|blog|docs)\b/gi, '')
+        .trim()
+        .split(/\s+/).slice(0, 3).join(' ')
+      if (brand) return `How does ${brand} compare to its competitors?`
+      try {
+        const hostname = new URL(sourceUrl).hostname.replace(/^www\./, '').split('.')[0]
+        return `How does ${hostname[0].toUpperCase() + hostname.slice(1)} compare to its competitors?`
+      } catch { return null }
+    }
+
     fetch('/analyze/competitor-query', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         markdown: nextMarkdown,
-        sourceUrl: nextNormalizedUrl || nextSourceSignals?.sourceUrl || '',
+        sourceUrl,
         pageIntelligence: nextPageIntelligence || {},
       }),
     })
-      .then(r => r.json())
+      .then(r => r.ok ? r.json() : Promise.reject(new Error(r.status)))
       .then(d => { if (Array.isArray(d.queries) && d.queries.length) setCompetitorQueries(d.queries) })
-      .catch(() => {})
+      .catch(() => {
+        const fallback = heuristicCompetitorQuery()
+        if (fallback) setCompetitorQueries([fallback])
+      })
       .finally(() => setCompetitorQueryLoading(false))
   }, [generateQuerySuggestions])
 
