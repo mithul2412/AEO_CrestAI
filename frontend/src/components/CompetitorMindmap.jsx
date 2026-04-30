@@ -4,8 +4,13 @@ const WIDTH = 860
 const HEIGHT = 520
 const CX = WIDTH / 2
 const CY = HEIGHT / 2
-const MIN_R = 86
-const MAX_R = 222
+const MIN_R = 92
+const MAX_R = 218
+const CANVAS_PAD = 48
+const REPULSION_PASSES = 6
+const LABEL_PAD = 22
+const VISIBLE_CAP_DEFAULT = 8
+const VISIBLE_CAP_MAX = 12
 
 const TIER_ORDER = ['leader', 'challenger', 'niche', 'adjacent']
 
@@ -33,7 +38,62 @@ function strongestAngleId(node) {
 }
 
 function nodeLabel(domain = '') {
-  return domain.length > 24 ? `${domain.slice(0, 23)}…` : domain
+  return domain.length > 22 ? `${domain.slice(0, 21)}…` : domain
+}
+
+// Pairwise repulsion: 6 deterministic passes that push overlapping nodes apart by 25% of
+// their overlap. No D3 dependency; cheap (O(n^2) on n<=12) and stable across renders.
+function relaxNodes(nodes) {
+  const result = nodes.map(node => ({ ...node }))
+  for (let pass = 0; pass < REPULSION_PASSES; pass++) {
+    for (let i = 0; i < result.length; i++) {
+      for (let j = i + 1; j < result.length; j++) {
+        const a = result[i]
+        const b = result[j]
+        const dx = b.x - a.x
+        const dy = b.y - a.y
+        const dist = Math.sqrt(dx * dx + dy * dy) || 0.01
+        const minDist = a.r + b.r + 8
+        if (dist >= minDist) continue
+        const overlap = (minDist - dist) * 0.25
+        const ux = dx / dist
+        const uy = dy / dist
+        a.x -= ux * overlap
+        a.y -= uy * overlap
+        b.x += ux * overlap
+        b.y += uy * overlap
+      }
+    }
+  }
+  return result.map(node => ({
+    ...node,
+    x: clamp(node.x, CANVAS_PAD, WIDTH - CANVAS_PAD),
+    y: clamp(node.y, CANVAS_PAD, HEIGHT - CANVAS_PAD),
+  }))
+}
+
+// Detect label-vs-node overlap to decide which labels need leader-line callouts.
+function labelNeedsCallout(node, others) {
+  const labelY = node.y + node.r + LABEL_PAD
+  const labelHalfW = Math.min(80, node.domain.length * 4)
+  for (const other of others) {
+    if (other === node) continue
+    const dx = Math.abs(other.x - node.x)
+    const dy = Math.abs(other.y - labelY)
+    if (dx < labelHalfW + other.r && dy < other.r + 14) return true
+  }
+  return false
+}
+
+// Place callout labels INSIDE the canvas at the side nearest the node, with text-anchor
+// pointed back toward the centre so the text grows away from the edge (never clips out).
+function calloutAnchor(node) {
+  const goingRight = node.x >= CX
+  return {
+    x: goingRight ? WIDTH - 12 : 12,
+    y: node.y,
+    anchor: goingRight ? 'end' : 'start',
+  }
 }
 
 function buildEmptyCopy(data) {
@@ -49,11 +109,15 @@ function buildEmptyCopy(data) {
 export default function CompetitorMindmap({ data, brandLabel = 'Your page' }) {
   const [activeId, setActiveId] = useState(null)
   const [focusIdx, setFocusIdx] = useState(0)
+  const [showAll, setShowAll] = useState(false)
+
+  const totalCompetitors = (data?.competitors || []).length
+  const visibleLimit = showAll ? VISIBLE_CAP_MAX : VISIBLE_CAP_DEFAULT
 
   const layout = useMemo(() => {
     if (!data || data.status !== 'ok') return null
     const angles = (data.angles || []).filter(angle => angle.status === 'ok').slice(0, 4)
-    const competitors = (data.competitors || []).slice(0, 12)
+    const competitors = (data.competitors || []).slice(0, visibleLimit)
     if (!angles.length || !competitors.length) return { angles, nodes: [], lanes: [] }
 
     const laneAngles = angles.map((angle, index) => {
@@ -81,33 +145,41 @@ export default function CompetitorMindmap({ data, brandLabel = 'Your page' }) {
       return acc
     }, {})
 
-    const nodes = []
+    const initial = []
     Object.entries(grouped).forEach(([angleId, list]) => {
       const lane = laneById[angleId] || laneAngles[0]
       const ordered = [...list].sort((a, b) => b.presenceScore - a.presenceScore)
       ordered.forEach((competitor, index) => {
         const presence = clamp(Number(competitor.presenceScore) || 0, 0, 100)
         const distance = MIN_R + (1 - presence / 100) * (MAX_R - MIN_R)
-        const offset = (index - (ordered.length - 1) / 2) * 34
+        const offset = (index - (ordered.length - 1) / 2) * 30
         const point = {
           x: CX + lane.vector.x * distance + lane.normal.x * offset,
           y: CY + lane.vector.y * distance + lane.normal.y * offset,
         }
         const coverage = clamp(Number(competitor.coverage) || 0, 0, 1)
         const appearances = competitor.appearances?.length || 0
-        nodes.push({
+        initial.push({
           ...competitor,
-          x: clamp(point.x, 42, WIDTH - 42),
-          y: clamp(point.y, 42, HEIGHT - 42),
-          r: 12 + coverage * 8 + Math.min(appearances, 4) * 1.5,
+          x: point.x,
+          y: point.y,
+          r: 11 + coverage * 7 + Math.min(appearances, 4) * 1.4,
           lane,
           tierMeta: TIER_META[competitor.tier] || TIER_META.adjacent,
         })
       })
     })
 
-    return { angles: laneAngles, lanes: laneAngles, nodes }
-  }, [data])
+    const nodes = relaxNodes(initial)
+
+    // Decide which labels are too crowded to render in-place and need a leader line.
+    const decorated = nodes.map(node => ({
+      ...node,
+      labelMode: labelNeedsCallout(node, nodes) ? 'callout' : 'inline',
+    }))
+
+    return { angles: laneAngles, lanes: laneAngles, nodes: decorated }
+  }, [data, visibleLimit])
 
   useEffect(() => {
     if (!layout?.nodes?.length) return
@@ -175,6 +247,16 @@ export default function CompetitorMindmap({ data, brandLabel = 'Your page' }) {
       </div>
 
       <div className="mindmap__canvas-wrap">
+        {totalCompetitors > VISIBLE_CAP_DEFAULT && (
+          <button
+            type="button"
+            className="mindmap__cap-toggle"
+            onClick={() => setShowAll(value => !value)}
+            aria-pressed={showAll}
+          >
+            {showAll ? `Show top ${VISIBLE_CAP_DEFAULT}` : `Show all ${Math.min(totalCompetitors, VISIBLE_CAP_MAX)}`}
+          </button>
+        )}
         <svg className="mindmap__svg" viewBox={`0 0 ${WIDTH} ${HEIGHT}`} role="img" aria-label="Competitor market positioning">
           <defs>
             <radialGradient id="marketHubGlow" cx="50%" cy="50%" r="50%">
@@ -277,9 +359,32 @@ export default function CompetitorMindmap({ data, brandLabel = 'Your page' }) {
                 <text x={node.x} y={node.y + 13} textAnchor="middle" className="mindmap__node-rank">
                   #{node.bestRank ?? '—'}
                 </text>
-                <text x={node.x} y={node.y + node.r + 18} textAnchor="middle" className="mindmap__node-label">
-                  {nodeLabel(node.domain)}
-                </text>
+                {node.labelMode === 'inline' ? (
+                  <text x={node.x} y={node.y + node.r + 18} textAnchor="middle" className="mindmap__node-label">
+                    {nodeLabel(node.domain)}
+                  </text>
+                ) : (() => {
+                  const anchor = calloutAnchor(node)
+                  return (
+                    <>
+                      <line
+                        className="mindmap__leader-line"
+                        x1={node.x + (node.x >= CX ? node.r : -node.r)}
+                        y1={node.y}
+                        x2={anchor.x + (anchor.anchor === 'end' ? -2 : 2)}
+                        y2={anchor.y}
+                      />
+                      <text
+                        className="mindmap__leader-label"
+                        x={anchor.x}
+                        y={anchor.y + 4}
+                        textAnchor={anchor.anchor}
+                      >
+                        {nodeLabel(node.domain)}
+                      </text>
+                    </>
+                  )
+                })()}
               </g>
             )
           })}
