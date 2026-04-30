@@ -20,6 +20,13 @@ function gapTone(gap) {
   return 'warn'
 }
 
+function scoreTone(score) {
+  if (typeof score !== 'number') return 'muted'
+  if (score >= 75) return 'ok'
+  if (score >= 50) return 'warn'
+  return 'danger'
+}
+
 export default function RunHeader() {
   const navigate = useNavigate()
   const {
@@ -30,6 +37,7 @@ export default function RunHeader() {
   const displayUrl = shortenUrl(normalizedUrl || url)
   const overall = activeResults?.overallScore
   const gap = activeResults?.gapScore
+  const citation = activeResults?.intelligence?.citationReadiness?.score
 
   const isWorking = contentAnalyzing || queryAnalyzing
 
@@ -71,6 +79,13 @@ export default function RunHeader() {
         <div className="runheader__metric">
           <span className="runheader__metric-label">Readiness</span>
           <span className="runheader__metric-value">{overall}</span>
+        </div>
+      )}
+
+      {typeof citation === 'number' && hasQueryResults && (
+        <div className="runheader__metric">
+          <span className="runheader__metric-label">Citation</span>
+          <span className={`runheader__metric-value ${scoreTone(citation)}`}>{citation}</span>
         </div>
       )}
 

@@ -26,7 +26,8 @@ function stringifyValue(value) {
 }
 
 function statusLabel(value) {
-  return String(value || 'not_scanned').replace(/_/g, ' ')
+  const label = String(value || 'not_scanned').replace(/_/g, ' ')
+  return label.charAt(0).toUpperCase() + label.slice(1)
 }
 
 function artifactLabel(value) {

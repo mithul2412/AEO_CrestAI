@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { readApiError } from '../utils/api.js'
 
 const RunContext = createContext(null)
@@ -63,13 +63,62 @@ export function RunProvider({ children }) {
   const [error, setError] = useState('')
   const [theme, setTheme] = useState(getInitialTheme)
   const [chatDraft, setChatDraft] = useState({ text: '', token: 0 })
+  const [querySuggestions, setQuerySuggestions] = useState([])
+  const [querySuggestionsLoading, setQuerySuggestionsLoading] = useState(false)
+  const [querySuggestionsMeta, setQuerySuggestionsMeta] = useState(null)
+  const querySuggestionsAbortRef = useRef(null)
+
+  const cancelPendingQuerySuggestions = useCallback(() => {
+    if (querySuggestionsAbortRef.current) {
+      querySuggestionsAbortRef.current.abort()
+      querySuggestionsAbortRef.current = null
+    }
+  }, [])
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme
     window.localStorage.setItem(THEME_KEY, theme)
   }, [theme])
 
-  const handleBaselineAnalyze = useCallback(async (nextMarkdown, nextSourceSignals = {}, nextPageIntelligence = null) => {
+  const generateQuerySuggestions = useCallback(async (nextMarkdown, nextPageIntelligence = null, nextNormalizedUrl = '') => {
+    if (!nextMarkdown) return
+    // Cancel any in-flight request before starting a new one
+    cancelPendingQuerySuggestions()
+    const controller = new AbortController()
+    querySuggestionsAbortRef.current = controller
+
+    setQuerySuggestionsLoading(true)
+    setQuerySuggestionsMeta(null)
+    try {
+      const res = await fetch('/analyze/query-suggestions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          markdown: nextMarkdown,
+          sourceUrl: nextNormalizedUrl,
+          pageIntelligence: nextPageIntelligence || {},
+        }),
+        signal: controller.signal,
+      })
+      if (!res.ok) throw new Error(await readApiError(res, `Query suggestions error: ${res.status}`))
+      const data = await res.json()
+      setQuerySuggestions(Array.isArray(data.queries) ? data.queries : [])
+      setQuerySuggestionsMeta({
+        model: data.model || '',
+        fallback: Boolean(data.fallback),
+      })
+    } catch (e) {
+      if (e.name === 'AbortError') return
+      setQuerySuggestions([])
+      setQuerySuggestionsMeta({ error: e.message, fallback: true })
+    } finally {
+      if (querySuggestionsAbortRef.current === controller) {
+        setQuerySuggestionsLoading(false)
+      }
+    }
+  }, [cancelPendingQuerySuggestions])
+
+  const handleBaselineAnalyze = useCallback(async (nextMarkdown, nextSourceSignals = {}, nextPageIntelligence = null, nextNormalizedUrl = '') => {
     setContentAnalyzing(true)
     setError('')
     try {
@@ -85,24 +134,30 @@ export function RunProvider({ children }) {
       if (!res.ok) throw new Error(await readApiError(res, `Analyze error: ${res.status}`))
       const data = await res.json()
       setBaselineResults(mergeResultsWithBaseline(data, null))
+      void generateQuerySuggestions(nextMarkdown, nextPageIntelligence, nextNormalizedUrl)
     } catch (e) {
       setError(e.message)
     } finally {
       setContentAnalyzing(false)
     }
-  }, [])
+  }, [generateQuerySuggestions])
 
   const handleFetchComplete = useCallback((nextMarkdown, nextCharCount, nextSourceSignals = {}, nextPageIntelligence = null, nextNormalizedUrl = '') => {
+    // Abort any in-flight query-suggestion request for the previous page
+    cancelPendingQuerySuggestions()
     setMarkdown(nextMarkdown)
     setNormalizedUrl(nextNormalizedUrl || nextSourceSignals?.sourceUrl || url)
     setCharCount(nextCharCount)
     setSourceSignals(nextSourceSignals)
     setPageIntelligence(nextPageIntelligence)
     setQuery('')
+    setQuerySuggestions([])
+    setQuerySuggestionsMeta(null)
+    setQuerySuggestionsLoading(false)
     setBaselineResults(null)
     setResults(null)
-    void handleBaselineAnalyze(nextMarkdown, nextSourceSignals, nextPageIntelligence)
-  }, [handleBaselineAnalyze, url])
+    void handleBaselineAnalyze(nextMarkdown, nextSourceSignals, nextPageIntelligence, nextNormalizedUrl || nextSourceSignals?.sourceUrl || url)
+  }, [cancelPendingQuerySuggestions, handleBaselineAnalyze, url])
 
   const handleAnalyze = useCallback(async () => {
     if (!markdown) return
@@ -140,6 +195,9 @@ export function RunProvider({ children }) {
     setSourceSignals({})
     setPageIntelligence(null)
     setQuery('')
+    setQuerySuggestions([])
+    setQuerySuggestionsMeta(null)
+    setQuerySuggestionsLoading(false)
     setBaselineResults(null)
     setResults(null)
     setError('')
@@ -160,7 +218,7 @@ export function RunProvider({ children }) {
     url, normalizedUrl, markdown, charCount, sourceSignals, pageIntelligence,
     query, theme, baselineResults, results, activeResults,
     contentAnalyzing, queryAnalyzing, error,
-    chatDraft,
+    chatDraft, querySuggestions, querySuggestionsLoading, querySuggestionsMeta,
 
     // derived
     hasFetched, hasBaseline, hasQueryResults,
@@ -169,14 +227,14 @@ export function RunProvider({ children }) {
     setUrl, setQuery, setTheme,
 
     // actions
-    handleFetchComplete, handleAnalyze, handleBaselineAnalyze,
+    handleFetchComplete, handleAnalyze, handleBaselineAnalyze, generateQuerySuggestions,
     startNewTest, sendDraftToChat,
   }), [
     url, normalizedUrl, markdown, charCount, sourceSignals, pageIntelligence,
     query, theme, baselineResults, results, activeResults,
-    contentAnalyzing, queryAnalyzing, error, chatDraft,
+    contentAnalyzing, queryAnalyzing, error, chatDraft, querySuggestions, querySuggestionsLoading, querySuggestionsMeta,
     hasFetched, hasBaseline, hasQueryResults,
-    handleFetchComplete, handleAnalyze, handleBaselineAnalyze,
+    handleFetchComplete, handleAnalyze, handleBaselineAnalyze, generateQuerySuggestions,
     startNewTest, sendDraftToChat,
   ])
 

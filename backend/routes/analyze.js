@@ -1,13 +1,15 @@
 import { Router } from 'express'
 import { computeGeoScore } from '../utils/geoScorer.js'
 import { computeGeuScore } from '../utils/geuScorer.js'
-import { ANALYSIS_PROMPT, LLM_CONTENT_SCORE_PROMPT } from '../models.js'
+import { ANALYSIS_PROMPT, DYNAMIC_FIX_PROMPT, LLM_CONTENT_SCORE_PROMPT, QUERY_SUGGESTION_PROMPT } from '../models.js'
 import { applyCompetitorGapScore, buildBaselineIntelligence, buildQueryIntelligence } from '../services/intelligenceScorer.js'
 import { generateHighestImpactFix } from '../services/fixGeneratorService.js'
 import { buildCompetitorCorpus } from '../services/competitorCorpusService.js'
 import { compareUserVsCompetitors } from '../services/competitorGapService.js'
-import { averageScores, runJsonModelPanel, truncateForModel } from '../services/openRouterModels.js'
+import { buildCompetitorMap } from '../services/competitorMapService.js'
+import { averageScores, getLlamaQueryModel, runJsonModelPanel, runSingleJsonModel } from '../services/openRouterModels.js'
 import { buildQueryDiscovery } from '../services/queryDiscoveryService.js'
+import { packContextForBaseline, packContextForQuery } from '../services/contextPacker.js'
 
 const router = Router()
 export const FAILURE_MODES = [
@@ -60,10 +62,169 @@ function normalizeContentPayload(model, parsed) {
   }
 }
 
-async function runLlmContentScore(markdown) {
+function pageBrandFromSource(sourceUrl = '', pageIntelligence = {}) {
+  const title = String(pageIntelligence?.extraction?.title || pageIntelligence?.extraction?.h1 || '').trim()
+  if (title) {
+    return title
+      .replace(/\s+[|-]\s+.*$/, '')
+      .replace(/\b(pricing|plans|features|home|homepage)\b/ig, '')
+      .trim()
+      .split(/\s+/)
+      .slice(0, 3)
+      .join(' ') || 'this page'
+  }
+
+  try {
+    const parsed = new URL(sourceUrl)
+    const base = parsed.hostname.replace(/^www\./, '').split('.')[0]
+    return base ? base[0].toUpperCase() + base.slice(1) : 'this page'
+  } catch {
+    return 'this page'
+  }
+}
+
+export function fallbackQuerySuggestions({ sourceUrl = '', pageIntelligence = {} } = {}) {
+  const brand = pageBrandFromSource(sourceUrl, pageIntelligence)
+  return [
+    `What is ${brand} best for?`,
+    `How does ${brand} compare to alternatives?`,
+    `What should buyers know about ${brand}?`,
+  ]
+}
+
+export function normalizeQuerySuggestionsPayload(model, parsed, fallback = []) {
+  const seen = new Set()
+  const queries = (Array.isArray(parsed?.queries) ? parsed.queries : [])
+    .map(query => String(query || '').replace(/\s+/g, ' ').trim())
+    .filter(query => query.length >= 12 && query.length <= 120)
+    .map(query => query.endsWith('?') ? query : `${query}?`)
+    .filter(query => {
+      const key = query.toLowerCase()
+      if (seen.has(key)) return false
+      seen.add(key)
+      return true
+    })
+    .slice(0, 3)
+
+  const usedFallback = queries.length < 3
+  return {
+    model,
+    queries: usedFallback ? fallback : queries,
+    fallback: usedFallback,
+  }
+}
+
+function normalizeExpectedLift(value = {}) {
+  return {
+    retrievalScore: String(value.retrievalScore || '+0').trim(),
+    answerScore: String(value.answerScore || '+0').trim(),
+    evidenceScore: String(value.evidenceScore || '+0').trim(),
+  }
+}
+
+export function normalizeDynamicFixPayload(model, parsed, fallback) {
+  const fix = String(parsed?.fix || '').trim()
+  const why = String(parsed?.why || '').trim()
+
+  if (!fix || !why) {
+    return {
+      ...fallback,
+      model,
+      fallback: true,
+    }
+  }
+
+  return {
+    failureMode: normalizeFailureMode(parsed.failureMode),
+    fix,
+    whereToEdit: String(parsed.whereToEdit || fallback?.whereToEdit || '').trim(),
+    why,
+    exampleCopy: String(parsed.exampleCopy || fallback?.exampleCopy || '').trim(),
+    expectedLift: normalizeExpectedLift(parsed.expectedLift || fallback?.expectedLift),
+    confidence: String(parsed.confidence || fallback?.confidence || 'medium').trim(),
+    model,
+    fallback: false,
+  }
+}
+
+async function generateDynamicHighestImpactFix({
+  query,
+  markdown,
+  intelligence,
+  pageIntelligence = {},
+  verdicts = [],
+  fallback,
+}) {
+  const fixModel = getLlamaQueryModel()
+  const topChunks = (intelligence?.retrieval?.topChunks || []).slice(0, 3).map(chunk => ({
+    chunkId: chunk.chunkId,
+    section: chunk.section,
+    position: chunk.position,
+    retrievalScore: chunk.retrievalScore,
+    similarity: chunk.similarity,
+    directAnswer: chunk.directAnswer,
+    text: chunk.text,
+  }))
+
+  const result = await runSingleJsonModel({
+    model: fixModel,
+    prompt: DYNAMIC_FIX_PROMPT,
+    content: [
+      `Target query: ${query}`,
+      `Page title: ${pageIntelligence?.extraction?.title || 'unknown'}`,
+      `H1: ${pageIntelligence?.extraction?.h1 || 'unknown'}`,
+      '',
+      `Citation subscores:\n${JSON.stringify(intelligence?.citationReadiness?.subscores || {}, null, 2)}`,
+      '',
+      `Retrieval diagnosis: ${intelligence?.retrieval?.diagnosis || 'unknown'}`,
+      `Answer extraction diagnosis: ${intelligence?.answerExtraction?.diagnosis || 'unknown'}`,
+      '',
+      `Model verdicts:\n${JSON.stringify(verdicts.map(verdict => ({
+        model: verdict.model,
+        queryMatchScore: verdict.queryMatchScore,
+        failureMode: verdict.failureMode,
+        topGap: verdict.topGap,
+        suggestedFix: verdict.suggestedFix,
+      })), null, 2)}`,
+      '',
+      `Top retrieved chunks:\n${JSON.stringify(topChunks, null, 2)}`,
+      '',
+      `Relevance-packed page context:\n${packContextForQuery({ markdown, query, pageIntelligence, budgetTokens: 1200 })}`,
+    ].join('\n'),
+    normalize: (model, parsed) => normalizeDynamicFixPayload(model, parsed, fallback),
+    maxTokens: 350,
+    temperature: 0.25,
+  })
+
+  return {
+    ...result,
+    modelId: result.modelId,
+    credentialLabel: result.credentialLabel,
+  }
+}
+
+export function dynamicFixFromVerdicts(verdicts = [], fallback) {
+  const verdictWithFix = verdicts.find(verdict => verdict.suggestedFix || verdict.topGap)
+  if (!verdictWithFix) return null
+
+  return {
+    failureMode: normalizeFailureMode(verdictWithFix.failureMode || fallback?.failureMode),
+    fix: String(verdictWithFix.suggestedFix || fallback?.fix || '').trim(),
+    whereToEdit: fallback?.whereToEdit || 'The section that should answer the target query most directly.',
+    why: String(verdictWithFix.topGap || fallback?.why || '').trim(),
+    exampleCopy: fallback?.exampleCopy || '',
+    expectedLift: normalizeExpectedLift(fallback?.expectedLift),
+    confidence: fallback?.confidence || 'medium',
+    model: verdictWithFix.model,
+    fallback: false,
+    source: 'model-verdict',
+  }
+}
+
+async function runLlmContentScore(markdown, pageIntelligence = {}) {
   const panel = await runJsonModelPanel({
     prompt: LLM_CONTENT_SCORE_PROMPT,
-    buildContent: model => `Content:\n${truncateForModel(markdown, model)}`,
+    buildContent: model => `Content:\n${packContextForBaseline({ markdown, pageIntelligence, budgetTokens: model.contextTokens })}`,
     normalize: normalizeContentPayload,
     maxTokens: 450,
   })
@@ -79,6 +240,53 @@ async function runLlmContentScore(markdown) {
     llmContentStatus: panel.status,
   }
 }
+
+router.post('/query-suggestions', async (req, res) => {
+  const {
+    markdown,
+    sourceUrl = '',
+    pageIntelligence = {},
+  } = req.body || {}
+
+  if (!markdown || typeof markdown !== 'string') {
+    return res.status(400).json({ error: 'markdown required (must be a string)' })
+  }
+
+    const suggestionModel = getLlamaQueryModel()
+  const fallback = fallbackQuerySuggestions({ sourceUrl, pageIntelligence })
+
+  try {
+    const result = await runSingleJsonModel({
+      model: suggestionModel,
+      prompt: QUERY_SUGGESTION_PROMPT,
+      content: [
+        `Source URL: ${sourceUrl || 'unknown'}`,
+        `Page title: ${pageIntelligence?.extraction?.title || 'unknown'}`,
+        `H1: ${pageIntelligence?.extraction?.h1 || 'unknown'}`,
+        '',
+        `Content:\n${packContextForBaseline({ markdown, pageIntelligence, budgetTokens: suggestionModel.contextTokens })}`,
+      ].join('\n'),
+      normalize: (model, parsed) => normalizeQuerySuggestionsPayload(model, parsed, fallback),
+      maxTokens: 350,
+      temperature: 0.4,
+    })
+
+    return res.json({
+      queries: result.queries,
+      model: result.model,
+      modelId: result.modelId,
+      credentialLabel: result.credentialLabel,
+      fallback: Boolean(result.fallback),
+    })
+  } catch (err) {
+    return res.json({
+      queries: fallback,
+      model: suggestionModel.label,
+      fallback: true,
+      error: err?.message || 'Query suggestions unavailable',
+    })
+  }
+})
 
 router.post('/', async (req, res) => {
   try {
@@ -103,7 +311,7 @@ router.post('/', async (req, res) => {
         llmContentScore,
         llmContentModels,
         llmContentStatus,
-      } = await runLlmContentScore(markdown)
+      } = await runLlmContentScore(markdown, pageIntelligence)
 
       const overallScore = buildOverallScore({ contentScore, geuScore, llmContentScore })
       const intelligence = buildBaselineIntelligence({ markdown, pageIntelligence })
@@ -127,7 +335,7 @@ router.post('/', async (req, res) => {
 
     const queryPanel = await runJsonModelPanel({
       prompt: ANALYSIS_PROMPT,
-      buildContent: model => `Query: ${query}\n\nContent:\n${truncateForModel(markdown, model)}`,
+      buildContent: model => `Query: ${query}\n\nContent:\n${packContextForQuery({ markdown, query, pageIntelligence, budgetTokens: model.contextTokens })}`,
       normalize: normalizeQueryPayload,
       maxTokens: 600,
     })
@@ -167,6 +375,51 @@ router.post('/', async (req, res) => {
       competitors: [],
       gap: null,
       failures: [],
+    }
+
+    let competitorMap = {
+      status: 'disabled',
+      reason: sourceUrl ? 'TAVILY_API_KEY is missing' : 'sourceUrl is required for competitor map',
+      angleCount: 0,
+      angles: [],
+      competitors: [],
+      grouped: {},
+      yourPresence: null,
+      marketSummary: {
+        searchedAngles: '0/0',
+        visibleCompetitors: 0,
+        sourceDomainPresence: 'Source domain was not evaluated.',
+        topLeader: null,
+        recommendedMove: sourceUrl ? 'TAVILY_API_KEY is missing' : 'sourceUrl is required for competitor map',
+      },
+    }
+
+    if (sourceUrl) {
+      try {
+        competitorMap = await buildCompetitorMap({
+          query: query.trim(),
+          sourceUrl,
+          markdown,
+          pageIntelligence,
+        })
+      } catch (err) {
+        competitorMap = {
+          status: 'error',
+          reason: err?.message || 'Competitor map failed',
+          angleCount: 0,
+          angles: [],
+          competitors: [],
+          grouped: {},
+          yourPresence: null,
+          marketSummary: {
+            searchedAngles: '0/0',
+            visibleCompetitors: 0,
+            sourceDomainPresence: 'Source domain was not evaluated.',
+            topLeader: null,
+            recommendedMove: err?.message || 'Competitor map failed',
+          },
+        }
+      }
     }
 
     if (sourceUrl) {
@@ -222,11 +475,31 @@ router.post('/', async (req, res) => {
       }
     }
 
-    const highestImpactFix = generateHighestImpactFix({
+    const fallbackHighestImpactFix = generateHighestImpactFix({
       query: query.trim(),
       intelligence: intelligenceBase,
       pageIntelligence,
     })
+    let highestImpactFix = fallbackHighestImpactFix
+    try {
+      highestImpactFix = await generateDynamicHighestImpactFix({
+        query: query.trim(),
+        markdown,
+        intelligence: intelligenceBase,
+        pageIntelligence,
+        verdicts,
+        fallback: fallbackHighestImpactFix,
+      })
+    } catch (err) {
+      highestImpactFix = dynamicFixFromVerdicts(verdicts, fallbackHighestImpactFix) || {
+        ...fallbackHighestImpactFix,
+        fallback: true,
+        error: err?.message || 'Dynamic fix generation failed',
+      }
+      if (!highestImpactFix.error) {
+        highestImpactFix.error = err?.message || 'Dynamic fix generation failed'
+      }
+    }
 
     const deterministicQueryScore = clampScore(intelligenceBase?.citationReadiness?.score)
     const queryScore = averageScores([llmQueryScore, deterministicQueryScore])
@@ -257,6 +530,7 @@ router.post('/', async (req, res) => {
         queryDiscovery,
         searchPresence,
         competitorIntelligence,
+        competitorMap,
         highestImpactFix,
       },
     })

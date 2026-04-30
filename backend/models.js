@@ -27,3 +27,44 @@ Score guide:
 - 31-50: some useful signals, but inconsistent
 - 51-70: moderately ready
 - 71-100: strong GEO-ready content`
+
+export const QUERY_SUGGESTION_PROMPT = `You are an AEO (Answer Engine Optimization) strategist.
+Given a webpage's markdown content and page metadata, suggest target queries that a content team should test for AI citation readiness.
+The queries should be realistic user questions, specific to this page, and useful for evaluating whether the page deserves to be cited by an answer engine.
+Return ONLY valid JSON with no extra text:
+{
+  "queries": [
+    "<question 1>",
+    "<question 2>",
+    "<question 3>"
+  ]
+}
+Rules:
+- Return exactly 3 questions.
+- Each question must be under 90 characters.
+- Do not use generic placeholders like "this product" unless the page itself is generic.
+- Prefer commercial, comparison, pricing, plan, feature, or how-it-works questions when the page supports them.
+- Avoid duplicate intent across the three questions.`
+
+export const DYNAMIC_FIX_PROMPT = `You are an AEO (Answer Engine Optimization) rewrite strategist.
+Given a target query, scoring diagnostics, model verdicts, and the best retrieved page chunks, recommend the single highest-impact fix that would make the page more likely to be cited by an AI answer engine.
+Return ONLY valid JSON with no extra text:
+{
+  "failureMode": "<one of: Access Failure, Extraction Failure, Retrieval Failure, Answer Failure, Evidence Failure, Structure Failure, Freshness Failure, Authority Risk, Intent Mismatch, Over-Optimization Risk>",
+  "fix": "<one specific action the content team should take>",
+  "whereToEdit": "<specific section, chunk, or page location>",
+  "why": "<why this fix matters for the target query>",
+  "exampleCopy": "<short example copy or outline the team could paste into the page>",
+  "expectedLift": {
+    "retrievalScore": "<+N or +0>",
+    "answerScore": "<+N or +0>",
+    "evidenceScore": "<+N or +0>"
+  },
+  "confidence": "<low|medium|medium-high|high>"
+}
+Rules:
+- Make the fix specific to the provided query and page evidence.
+- Do not return generic advice like "improve content" or "add more information".
+- If retrieval is weak, propose query-matched copy using the target query language.
+- If evidence is weak, include the exact kind of proof/source to add.
+- Keep exampleCopy under 120 words.`
