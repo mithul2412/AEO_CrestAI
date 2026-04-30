@@ -218,7 +218,6 @@ export default function Overview() {
     query, setQuery, handleAnalyze, queryAnalyzing, hasBaseline, hasQueryResults,
     url, normalizedUrl, sendDraftToChat,
     handleBaselineAnalyze, sourceSignals,
-    querySuggestions, querySuggestionsLoading, querySuggestionsMeta, generateQuerySuggestions,
   } = useRun()
 
   const [drillKey, setDrillKey] = useState(null)
@@ -628,30 +627,14 @@ export default function Overview() {
               </button>
             </div>
             {!hasQueryResults && (
-              <>
-                <div className="suggestion-row">
-                  {querySuggestionsLoading && (
-                    <span className="caption">Generating target queries with Llama 3.3 70B…</span>
-                  )}
-                  {!querySuggestionsLoading && querySuggestions.map(tip => (
-                    <button key={tip} className="chip" onClick={() => setQuery(tip)}>{tip}</button>
-                  ))}
-                  {!querySuggestionsLoading && querySuggestionsMeta?.fallback && (
-                    <button
-                      type="button"
-                      className="chip"
-                      onClick={() => generateQuerySuggestions(markdown, pageIntelligence, normalizedUrl || url)}
-                    >
-                      Retry Llama suggestions
-                    </button>
-                  )}
-                </div>
-                {!querySuggestionsLoading && querySuggestionsMeta?.model && (
-                  <span className="caption">
-                    Suggested by {querySuggestionsMeta.model}{querySuggestionsMeta.fallback ? ' fallback' : ''}.
-                  </span>
-                )}
-              </>
+              <div className="suggestion-row">
+                {(() => {
+                  const src = pageIntelligence?.extraction?.title || pageIntelligence?.extraction?.h1 || ''
+                  const brand = src.split(/[|–—]/)[0].trim().split(/\s+/).slice(0, 3).join(' ') || 'this brand'
+                  const tip = `How does ${brand} compare to its competitors?`
+                  return <button className="chip" onClick={() => setQuery(tip)}>{tip}</button>
+                })()}
+              </div>
             )}
             {error && <div className="error-bar">{error}</div>}
           </div>

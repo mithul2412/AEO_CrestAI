@@ -134,7 +134,6 @@ export function RunProvider({ children }) {
       if (!res.ok) throw new Error(await readApiError(res, `Analyze error: ${res.status}`))
       const data = await res.json()
       setBaselineResults(mergeResultsWithBaseline(data, null))
-      void generateQuerySuggestions(nextMarkdown, nextPageIntelligence, nextNormalizedUrl)
     } catch (e) {
       setError(e.message)
     } finally {
