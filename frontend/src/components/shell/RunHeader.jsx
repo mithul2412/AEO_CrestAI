@@ -1,5 +1,6 @@
 import { useNavigate } from 'react-router-dom'
 import { useRun } from '../../state/RunContext.jsx'
+import { getAnswerGapMetric } from '../../utils/diagnosticBrief.js'
 
 function shortenUrl(url) {
   if (!url) return ''
@@ -37,6 +38,7 @@ export default function RunHeader() {
   const displayUrl = shortenUrl(normalizedUrl || url)
   const overall = activeResults?.overallScore
   const gap = activeResults?.gapScore
+  const gapMetric = getAnswerGapMetric(gap)
   const citation = activeResults?.intelligence?.citationReadiness?.score
 
   const isWorking = contentAnalyzing || queryAnalyzing
@@ -92,8 +94,12 @@ export default function RunHeader() {
       {typeof gap === 'number' && (
         <div className="runheader__metric">
           <span className="runheader__metric-label">Gap</span>
-          <span className={`runheader__metric-value ${gapTone(gap)}`}>
-            {gap >= 0 ? '+' : ''}{gap}
+          <span
+            className={`runheader__metric-value runheader__metric-value--gap ${gapTone(gap)}`}
+            title={gapMetric.accessible}
+            aria-label={gapMetric.accessible}
+          >
+            {gapMetric.compact}
           </span>
         </div>
       )}

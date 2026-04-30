@@ -51,10 +51,10 @@ export default function NavRail() {
 
   const items = [
     { to: '/', icon: Icon.overview, label: 'Overview', state: overviewState, end: true },
-    { to: '/source', icon: Icon.source, label: 'Source', state: sourceState },
     { to: '/diagnostics', icon: Icon.diagnostics, label: 'Diagnostics', state: diagState },
     { to: '/rewrite', icon: Icon.rewrite, label: 'Rewrite Help', state: rewriteState },
     { to: '/agentic', icon: Icon.agentic, label: 'Agentic Layer', state: agenticState },
+    { to: '/source-audit', icon: Icon.source, label: 'Source Audit', state: sourceState, secondary: true },
   ]
 
   return (
@@ -64,7 +64,7 @@ export default function NavRail() {
           key={item.to}
           to={item.to}
           end={item.end}
-          className={({ isActive }) => `navrail__item${isActive ? ' active' : ''}`}
+          className={({ isActive }) => `navrail__item${item.secondary ? ' navrail__item--secondary' : ''}${isActive ? ' active' : ''}`}
           title={item.label}
         >
           <span className="navrail__item-icon">{item.icon}</span>

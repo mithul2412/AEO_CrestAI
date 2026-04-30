@@ -9,6 +9,7 @@ import DrillDrawer from '../components/primitives/DrillDrawer.jsx'
 import { LoadingBlock, LockedBlock, ErrorBlock } from '../components/primitives/StateBlocks.jsx'
 import {
   getAnswerGapCopy,
+  getAnswerGapMetric,
   getBlockedPageState,
   getExecutiveQueryVerdict,
   getFixFirstCopy,
@@ -24,6 +25,26 @@ function baselineVerdict(score) {
 
 function topChecks(checks = [], passed, limit = 3) {
   return checks.filter(check => check.passed === passed).slice(0, limit)
+}
+
+function displayCheckLabel(check) {
+  if (check?.passed === false) {
+    const blockerLabels = {
+      faq: 'FAQ structure missing or thin',
+      stats: 'Statistics / numbers not detected',
+      citations: 'External citations missing',
+      schema: 'Structured data / schema not detected',
+      comparison: 'Comparison framing missing',
+      fluency: 'Page structure / reading flow too thin',
+      llmstxt: 'llms.txt not detected',
+      standalone: 'Standalone answer sentences missing',
+      frontloaded: 'Answer not front-loaded',
+      sourced: 'Sourced claims missing',
+      coherent: 'Opening not direct enough',
+    }
+    return blockerLabels[check.id] || check?.label || ''
+  }
+  return check?.label || ''
 }
 
 const SAMPLE_URLS = [
@@ -257,9 +278,15 @@ export default function Overview() {
     : queryVerdict
       ? queryVerdict.next
       : 'Add a target query to test direct answer quality.'
+  const verdictPillLabel = blockedState.isBlocked
+    ? 'Blocked'
+    : queryVerdict
+      ? queryVerdict.title.replace(/^This page /, '').replace(/^The /, '')
+      : verdictBaseline.word !== '—' ? verdictBaseline.word : 'Reading'
 
   const gap = activeResults.gapScore
   const gapCopy = hasQueryResults ? getAnswerGapCopy(gap) : null
+  const gapMetric = hasQueryResults ? getAnswerGapMetric(gap) : null
 
   const checks = activeResults.checks || []
   const geuChecks = activeResults.geuChecks || []
@@ -391,12 +418,12 @@ export default function Overview() {
           <h1 className="hero__verdict">{verdictTitle}</h1>
           <p className="hero__summary">{verdictSummary}</p>
           <div className="hero__next">
-            <StatPill tone={verdictTone}>{verdictBaseline.word !== '—' ? verdictBaseline.word : 'Reading'}</StatPill>
+            <StatPill tone={verdictTone}>{verdictPillLabel}</StatPill>
             <span className="caption">{verdictNext}</span>
           </div>
         </div>
         <div className="hero__score-box">
-          <span className="kicker">Overall readiness</span>
+          <span className="kicker">Overall readiness of the page</span>
           <span className="hero__score-num score-reveal" key={typeof overall === 'number' ? overall : 'pending'}>
             {typeof overall === 'number' ? overall : '—'}
             <span className="hero__score-suffix">/100</span>
@@ -488,7 +515,7 @@ export default function Overview() {
             blockers.length ? blockers.map(b => (
               <div key={b.id} className="list__row list__row--danger">
                 <span className="list__row-marker">−{b.weight}</span>
-                <span className="list__row-text">{b.label}</span>
+                <span className="list__row-text">{displayCheckLabel(b)}</span>
               </div>
             )) : (
               <div className="list__row"><span className="list__row-marker">—</span><span className="list__row-text muted">No major blocker detected.</span></div>
@@ -514,15 +541,14 @@ export default function Overview() {
               <h2 className="h-2">Page quality vs. answer quality.</h2>
             </div>
           </div>
-          <div className="callout">
-            <span className={`callout__metric callout__metric--${gapCopy.tone}`}>
-              {typeof gap === 'number' ? `${gap >= 0 ? '+' : ''}${gap}` : '—'}
-            </span>
+          <div className="callout callout--summary">
             <div className="callout__copy">
               <span className="callout__title">{gapCopy.label}</span>
               <span className="callout__detail">{gapCopy.detail}</span>
             </div>
-            <StatPill tone={gapCopy.tone === 'muted' ? 'plain' : gapCopy.tone}>{gapCopy.label}</StatPill>
+            <StatPill tone={gapCopy.tone === 'muted' ? 'plain' : gapCopy.tone}>
+              {gapMetric?.compact || 'Unavailable'}
+            </StatPill>
           </div>
         </section>
       )}
