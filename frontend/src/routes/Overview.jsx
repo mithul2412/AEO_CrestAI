@@ -26,8 +26,37 @@ function topChecks(checks = [], passed, limit = 3) {
   return checks.filter(check => check.passed === passed).slice(0, limit)
 }
 
+const DEMO_URLS = [
+  {
+    label: 'Stripe Pricing',
+    url: 'https://stripe.com/pricing',
+    hint: 'Pricing page · commercial',
+  },
+  {
+    label: 'Linear',
+    url: 'https://linear.app',
+    hint: 'Product landing · SaaS',
+  },
+  {
+    label: 'Notion',
+    url: 'https://www.notion.so',
+    hint: 'Product landing · SaaS',
+  },
+  {
+    label: 'MDN: DNS',
+    url: 'https://developer.mozilla.org/en-US/docs/Glossary/DNS',
+    hint: 'Reference / glossary',
+  },
+]
+
 function FocusGate() {
   const { url, setUrl, handleFetchComplete, contentAnalyzing } = useRun()
+  const [autoFetchToken, setAutoFetchToken] = useState(0)
+
+  const handleDemoClick = (demoUrl) => {
+    setUrl(demoUrl)
+    setAutoFetchToken(token => token + 1)
+  }
 
   return (
     <div className="focus__inner">
@@ -42,10 +71,28 @@ function FocusGate() {
           url={url}
           onUrlChange={setUrl}
           onFetchComplete={handleFetchComplete}
+          autoFetchToken={autoFetchToken}
         />
         {contentAnalyzing && (
           <span className="kicker">Analyzing baseline content signals…</span>
         )}
+        <div className="focus__demo">
+          <span className="kicker focus__demo-label">Try a sample</span>
+          <div className="focus__demo-row">
+            {DEMO_URLS.map(demo => (
+              <button
+                key={demo.url}
+                type="button"
+                className="focus__demo-chip"
+                onClick={() => handleDemoClick(demo.url)}
+                disabled={contentAnalyzing}
+              >
+                <span className="focus__demo-name">{demo.label}</span>
+                <span className="focus__demo-hint">{demo.hint}</span>
+              </button>
+            ))}
+          </div>
+        </div>
       </div>
     </div>
   )
@@ -260,13 +307,28 @@ export default function Overview() {
         </div>
         <div className="hero__score-box">
           <span className="kicker">Overall readiness</span>
-          <span className="hero__score-num">
+          <span className="hero__score-num score-reveal" key={typeof overall === 'number' ? overall : 'pending'}>
             {typeof overall === 'number' ? overall : '—'}
             <span className="hero__score-suffix">/100</span>
           </span>
           <span className={`hero__score-tone hero__score-tone--${verdictTone}`}>
             {verdictTone === 'ok' ? 'Above the citation bar' : verdictTone === 'warn' ? 'Sits at the risk line' : verdictTone === 'danger' ? 'Below the citation bar' : 'Reading the page'}
           </span>
+          {activeResults?.scoreConfidence && (
+            <span
+              className="confidence-chip"
+              data-confidence={activeResults.scoreConfidence}
+              title={
+                activeResults.scoreConfidence === 'full'
+                  ? 'All models contributed to this score.'
+                  : activeResults.scoreConfidence === 'partial'
+                    ? 'Some models did not respond — score is averaged from those that did.'
+                    : 'No models responded — showing rule-based signals only.'
+              }
+            >
+              {activeResults.scoreConfidence === 'full' ? 'Full read' : activeResults.scoreConfidence === 'partial' ? 'Partial read' : 'Rules-only'}
+            </span>
+          )}
         </div>
       </section>
 
@@ -426,6 +488,7 @@ export default function Overview() {
             )}
             <div className="query-row">
               <input
+                id="query-input"
                 className="query-row__input"
                 placeholder="e.g. what is the best CRM for small business?"
                 value={query}

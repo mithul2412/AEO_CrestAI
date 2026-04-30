@@ -14,6 +14,22 @@ const CATEGORY_STOP_WORDS = new Set([
   'costs', 'review', 'reviews', 'tool', 'tools', 'platform', 'platforms', 'software',
   'service', 'services', 'provider', 'providers', 'solution', 'solutions',
   'choose', 'select', 'find',
+  // Comparative / superlative adjectives — never product categories
+  'fewer', 'faster', 'easier', 'simpler', 'cheaper', 'harder', 'stronger', 'deeper',
+  'wider', 'higher', 'lower', 'longer', 'larger', 'smaller', 'greater', 'newer',
+  // Common landing-page adjectives and adverbs
+  'smart', 'quick', 'clean', 'clear', 'light', 'heavy', 'ready', 'fully', 'truly',
+  'easily', 'simply', 'really', 'directly', 'already', 'always', 'every', 'often',
+  // Pronouns / determiners
+  'their', 'these', 'those', 'other', 'about', 'along', 'since', 'while',
+  'more', 'most', 'some', 'many', 'much', 'each', 'both', 'more', 'less',
+  // Common verb forms in headings
+  'get', 'gets', 'got', 'build', 'built', 'helps', 'makes', 'keeps', 'gives',
+  'works', 'needs', 'runs', 'lets', 'using', 'being', 'doing', 'going', 'done',
+  'start', 'after', 'again', 'could', 'would', 'might', 'should',
+  // Common non-category nouns
+  'users', 'teams', 'world', 'place', 'level', 'value', 'power', 'ways',
+  'time', 'work', 'life', 'part', 'thing',
 ])
 
 const PRESERVED_CATEGORY_TERMS = ['crm', 'seo', 'aeo', 'geo', 'cms', 'erp', 'hris', 'api', 'ai']
@@ -77,6 +93,10 @@ function humanizeCategory(value = '') {
 
   const phrase = filtered.join(' ')
   if (!phrase) return ''
+
+  // If only prepositions survived filtering, it's not a real category
+  const PREPS = new Set(['for', 'with', 'without', 'near', 'by', 'to', 'from', 'in', 'on', 'at', 'of'])
+  if (phrase.toLowerCase().split(/\s+/).every(w => PREPS.has(w))) return ''
 
   return phrase
     .split(/\s+/)
@@ -170,12 +190,15 @@ export function extractCategory({ query = '', brand = '', pageIntelligence = {},
   }
 
   const source = compact(headings.join(' ') || markdown)
+  // Word-limited patterns: capture group uses [a-z0-9-]+ (no spaces) with optional extra words
+  // to prevent greedy matching across entire heading sentences.
+  const W = '[a-z][a-z0-9-]+'  // single hyphenated word
   const patterns = [
-    /\bbest\s+([a-z][a-z0-9 -]{3,70})\b/i,
-    /\b([a-z0-9&.+#/-]{2,30})\s+(?:software|platform|tool|service)s?\s+for\s+([a-z][a-z0-9 -]{3,50})\b/i,
-    /\b([a-z][a-z0-9 -]{1,50})\s+(?:software|platform|provider|providers|plans|tool|tools|service|services)\b/i,
-    /\b(?:software|platform|tool|service|provider)s?\s+for\s+([a-z][a-z0-9 -]{3,70})\b/i,
-    /\b(?:compare|comparison of)\s+([a-z][a-z0-9 -]{3,70})\b/i,
+    /\bbest\s+([a-z][a-z0-9 -]{3,50})\b/i,
+    new RegExp(`\\b(${W}(?:\\s+${W}){0,2})\\s+(?:software|platform|tool|service)s?\\s+for\\s+([a-z][a-z0-9 -]{3,50})\\b`, 'i'),
+    new RegExp(`\\b(${W}(?:\\s+${W}){0,2})\\s+(?:software|platform|provider|providers|plans|tool|tools|service|services)\\b`, 'i'),
+    /\b(?:software|platform|tool|service|provider)s?\s+for\s+([a-z][a-z0-9 -]{3,60})\b/i,
+    /\b(?:compare|comparison of)\s+([a-z][a-z0-9 -]{3,60})\b/i,
   ]
 
   for (const pattern of patterns) {
@@ -187,10 +210,121 @@ export function extractCategory({ query = '', brand = '', pageIntelligence = {},
     }
   }
 
-  const words = getWords(source.toLowerCase())
-    .map(word => word.replace(/[^a-z0-9-]/g, ''))
-    .filter(word => word.length > 4 && !GENERIC_BRAND_WORDS.has(word) && !CATEGORY_STOP_WORDS.has(word))
-  return words.slice(0, 3).join(' ') || fallback
+  // Near-last-resort: extract from H1/title directly (better signal than scattered headings)
+  const titleSources = [
+    pageIntelligence?.extraction?.h1,
+    pageIntelligence?.extraction?.title,
+  ].filter(Boolean)
+
+  const TITLE_PREPS = new Set(['for', 'with', 'without', 'near', 'by', 'to', 'from', 'in', 'on', 'at', 'of'])
+  for (const src of titleSources) {
+    const parts = String(src).split(/[|–—]/).map(p => p.trim())
+    for (const part of parts) {
+      const cleaned = humanizeCategory(removeBrand(part, brand))
+      if (!cleaned) continue
+      // Trim at the first preposition so "issue tracker for teams" → "issue tracker"
+      const words = cleaned.split(/\s+/)
+      const prepIdx = words.findIndex(w => TITLE_PREPS.has(w.toLowerCase()))
+      const trimmed = (prepIdx > 0 ? words.slice(0, prepIdx) : words).slice(0, 3).join(' ')
+      if (trimmed) return trimmed
+    }
+  }
+
+  return fallback
+}
+
+const REFERENCE_URL_PATTERNS = [
+  /developer\.mozilla\.org\//i,
+  /\.wikipedia\.org\//i,
+  /docs\.[a-z0-9-]+\.[a-z]{2,}\//i,
+  /\/docs?\//i,
+  /\/glossary\//i,
+  /\/reference\//i,
+  /\/api(?:\/|$)/i,
+  /\/spec(?:s)?\//i,
+  /developer\.[a-z0-9-]+\.[a-z]{2,}\//i,
+]
+
+const COMPARISON_HINTS = /\b(vs\.?|versus|compare|comparison|alternatives?|competitors?)\b/i
+const FAQ_HINTS = /\b(faq|frequently asked|q&a|questions and answers)\b/i
+const PRICING_HINTS = /\b(pricing|plans?|tier|tiers|cost|cost(s|ing))\b/i
+const PRODUCT_HINTS = /\b(features|how it works|why\s+\w+|book a demo|get started|sign up)\b/i
+
+function looksLikeReferenceShape({ headings = [], wordCount = 0, h1 = '' }) {
+  const headingsLower = headings.map(heading => String(heading || '').toLowerCase())
+  const refSignals = headingsLower.filter(heading =>
+    /\bdefinition\b|\bsyntax\b|\bsee also\b|\bexamples?\b|\bspecification(s)?\b|\bbrowser compat/i.test(heading)
+  ).length
+  const shortBody = wordCount > 0 && wordCount < 1500
+  const titleHintsConcept = /^[\w\-+#./ ]{1,40}$/.test(String(h1 || '').trim())
+  return refSignals >= 2 || (shortBody && refSignals >= 1) || (shortBody && titleHintsConcept && refSignals === 0 && headingsLower.some(h => /(see also|further reading|related)/i.test(h)))
+}
+
+export function detectPageType({ sourceUrl = '', pageIntelligence = {}, markdown = '' } = {}) {
+  const extraction = pageIntelligence?.extraction || {}
+  const url = String(sourceUrl || '')
+  const title = String(extraction.title || '').toLowerCase()
+  const h1 = String(extraction.h1 || '')
+  const headings = Array.isArray(extraction.headings) ? extraction.headings : []
+  const wordCount = Number(extraction.wordCount) || getWords(markdown).length
+
+  if (REFERENCE_URL_PATTERNS.some(pattern => pattern.test(url))) return 'reference'
+  if (looksLikeReferenceShape({ headings, wordCount, h1 })) return 'reference'
+
+  const allText = [title, h1, headings.join(' ')].join(' ').toLowerCase()
+  if (FAQ_HINTS.test(allText)) return 'faq'
+  if (COMPARISON_HINTS.test(allText)) return 'comparison'
+  if (PRICING_HINTS.test(allText)) return 'pricing'
+  if (PRODUCT_HINTS.test(allText)) return 'product'
+  return 'commercial'
+}
+
+const REFERENCE_FALLBACK_NOISE_HEADINGS = /^(see also|further reading|references?|related|external links|browser compatibility|specifications?)$/i
+
+export function isReferenceNoiseSection(section = '') {
+  return REFERENCE_FALLBACK_NOISE_HEADINGS.test(String(section || '').trim())
+}
+
+export function fallbackQueriesForPageType({ pageType = 'commercial', brand = '', h1 = '', category = '' } = {}) {
+  const subject = String(h1 || brand || 'this page').trim() || 'this page'
+  const brandName = String(brand || subject).trim() || 'this page'
+  const cat = String(category || 'provider').trim() || 'provider'
+
+  if (pageType === 'reference') {
+    return [
+      `What is ${subject}?`,
+      `How does ${subject} work?`,
+      `${subject} vs related concepts?`,
+    ]
+  }
+  if (pageType === 'faq') {
+    return [
+      `What does ${brandName} cover?`,
+      `Common questions about ${cat}?`,
+      `When should I use a ${cat}?`,
+    ]
+  }
+  // Commercial / product / pricing / comparison: 1 named-brand question + 2 category questions
+  // (the category questions test whether this page can be cited for generic "best X" searches).
+  if (pageType === 'pricing') {
+    return [
+      `How much does ${brandName} cost?`,
+      `Best ${cat} pricing for small business?`,
+      `Most affordable ${cat}?`,
+    ]
+  }
+  if (pageType === 'comparison') {
+    return [
+      `Is ${brandName} better than alternatives?`,
+      `Best ${cat} for small business?`,
+      `Top ${cat} this year?`,
+    ]
+  }
+  return [
+    `What is ${brandName} best for?`,
+    `Best ${cat} for small business?`,
+    `Top ${cat} for growing teams?`,
+  ]
 }
 
 function uniq(values) {
