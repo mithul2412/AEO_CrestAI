@@ -68,6 +68,13 @@ export function RunProvider({ children }) {
   const [querySuggestionsMeta, setQuerySuggestionsMeta] = useState(null)
   const querySuggestionsAbortRef = useRef(null)
 
+  const cancelPendingQuerySuggestions = useCallback(() => {
+    if (querySuggestionsAbortRef.current) {
+      querySuggestionsAbortRef.current.abort()
+      querySuggestionsAbortRef.current = null
+    }
+  }, [])
+
   useEffect(() => {
     document.documentElement.dataset.theme = theme
     window.localStorage.setItem(THEME_KEY, theme)
@@ -75,10 +82,8 @@ export function RunProvider({ children }) {
 
   const generateQuerySuggestions = useCallback(async (nextMarkdown, nextPageIntelligence = null, nextNormalizedUrl = '') => {
     if (!nextMarkdown) return
-    // Cancel any in-flight request from a previous page
-    if (querySuggestionsAbortRef.current) {
-      querySuggestionsAbortRef.current.abort()
-    }
+    // Cancel any in-flight request before starting a new one
+    cancelPendingQuerySuggestions()
     const controller = new AbortController()
     querySuggestionsAbortRef.current = controller
 
@@ -111,7 +116,7 @@ export function RunProvider({ children }) {
         setQuerySuggestionsLoading(false)
       }
     }
-  }, [])
+  }, [cancelPendingQuerySuggestions])
 
   const handleBaselineAnalyze = useCallback(async (nextMarkdown, nextSourceSignals = {}, nextPageIntelligence = null, nextNormalizedUrl = '') => {
     setContentAnalyzing(true)
@@ -139,10 +144,7 @@ export function RunProvider({ children }) {
 
   const handleFetchComplete = useCallback((nextMarkdown, nextCharCount, nextSourceSignals = {}, nextPageIntelligence = null, nextNormalizedUrl = '') => {
     // Abort any in-flight query-suggestion request for the previous page
-    if (querySuggestionsAbortRef.current) {
-      querySuggestionsAbortRef.current.abort()
-      querySuggestionsAbortRef.current = null
-    }
+    cancelPendingQuerySuggestions()
     setMarkdown(nextMarkdown)
     setNormalizedUrl(nextNormalizedUrl || nextSourceSignals?.sourceUrl || url)
     setCharCount(nextCharCount)
@@ -155,7 +157,7 @@ export function RunProvider({ children }) {
     setBaselineResults(null)
     setResults(null)
     void handleBaselineAnalyze(nextMarkdown, nextSourceSignals, nextPageIntelligence, nextNormalizedUrl || nextSourceSignals?.sourceUrl || url)
-  }, [handleBaselineAnalyze, url])
+  }, [cancelPendingQuerySuggestions, handleBaselineAnalyze, url])
 
   const handleAnalyze = useCallback(async () => {
     if (!markdown) return
