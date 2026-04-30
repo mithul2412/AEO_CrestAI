@@ -429,13 +429,16 @@ a { color: inherit; text-decoration: none; }
 
 .pill {
   display: inline-flex; align-items: center; gap: var(--s-2);
+  flex: 0 0 auto;
   padding: 0 var(--s-3); height: 22px;
   border: 1px solid var(--line-strong);
   border-radius: 999px;
   font-family: var(--font-mono);
   font-size: 11px;
+  line-height: 1;
   letter-spacing: 0.04em;
   text-transform: uppercase;
+  white-space: nowrap;
   color: var(--muted);
   background: transparent;
 }
@@ -472,7 +475,12 @@ a { color: inherit; text-decoration: none; }
 
 .section { display: flex; flex-direction: column; gap: var(--s-4); }
 .section__head { display: flex; align-items: flex-end; justify-content: space-between; gap: var(--s-4); }
-.section__head-titles { display: flex; flex-direction: column; gap: var(--s-2); }
+.section__head-titles { display: flex; flex-direction: column; gap: var(--s-2); min-width: 0; }
+.section__head--fix { align-items: flex-start; }
+.section__head--fix .pill { margin-top: 1px; }
+@media (max-width: 640px) {
+  .section__head { align-items: flex-start; flex-wrap: wrap; }
+}
 
 /* ----- metric tile ------------------------------------------------------ */
 

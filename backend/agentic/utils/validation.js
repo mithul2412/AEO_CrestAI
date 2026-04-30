@@ -34,7 +34,7 @@ export function containsRiskyClaimTerm(value) {
 }
 
 export function containsPrivateRuntimeValue(value) {
-  return /\b(?:GROQ_API_KEY|OPENROUTER_API_KEY|JINA_API_KEY|AGENTIC_PROFILE_BASE_URL)\b|\/Users\/|\/home\/|C:\\Users\\/i.test(String(value || ''))
+  return /\b(?:GROQ_API_KEY|OPENROUTER_API_KEY(?:_[A-Z0-9_]+)?|JINA_API_KEY|AGENTIC_PROFILE_BASE_URL)\b|\/Users\/|\/home\/|C:\\Users\\/i.test(String(value || ''))
 }
 
 export function hasPricingSource(profile) {
