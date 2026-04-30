@@ -26,74 +26,164 @@ function topChecks(checks = [], passed, limit = 3) {
   return checks.filter(check => check.passed === passed).slice(0, limit)
 }
 
-const DEMO_URLS = [
-  {
-    label: 'Stripe Pricing',
-    url: 'https://stripe.com/pricing',
-    hint: 'Pricing page · commercial',
-  },
-  {
-    label: 'Linear',
-    url: 'https://linear.app',
-    hint: 'Product landing · SaaS',
-  },
-  {
-    label: 'Notion',
-    url: 'https://www.notion.so',
-    hint: 'Product landing · SaaS',
-  },
-  {
-    label: 'MDN: DNS',
-    url: 'https://developer.mozilla.org/en-US/docs/Glossary/DNS',
-    hint: 'Reference / glossary',
-  },
+const SAMPLE_URLS = [
+  'https://stripe.com/pricing',
+  'https://www.notion.com/help',
+  'https://anthropic.com',
+  'https://vercel.com/blog',
 ]
+
+const VIEW_COPY = {
+  human: 'Looks fine to you. The page reads cleanly in a normal browser.',
+  ai:    'But AI systems may see less — blocked sections, weak metadata, or content too thin to cite.',
+}
 
 function FocusGate() {
   const { url, setUrl, handleFetchComplete, contentAnalyzing } = useRun()
+  const [view, setView] = useState('human')
   const [autoFetchToken, setAutoFetchToken] = useState(0)
+  const isAi = view === 'ai'
 
-  const handleDemoClick = (demoUrl) => {
-    setUrl(demoUrl)
+  const handleSampleClick = (sampleUrl) => {
+    setUrl(sampleUrl)
     setAutoFetchToken(token => token + 1)
   }
 
   return (
-    <div className="focus__inner">
-      <span className="kicker">Crest.ai · AI Visibility Lab</span>
-      <h1 className="focus__title">Test AI citation readiness.</h1>
-      <p className="focus__copy">
-        Paste a live page URL. Crest.ai reads the AI-visible markdown, checks crawler access,
-        runs a baseline read, and lets you score the page against a target query.
-      </p>
-      <div className="focus__url-section">
-        <UrlInput
-          url={url}
-          onUrlChange={setUrl}
-          onFetchComplete={handleFetchComplete}
-          autoFetchToken={autoFetchToken}
-        />
-        {contentAnalyzing && (
-          <span className="kicker">Analyzing baseline content signals…</span>
-        )}
-        <div className="focus__demo">
-          <span className="kicker focus__demo-label">Try a sample</span>
-          <div className="focus__demo-row">
-            {DEMO_URLS.map(demo => (
-              <button
-                key={demo.url}
-                type="button"
-                className="focus__demo-chip"
-                onClick={() => handleDemoClick(demo.url)}
-                disabled={contentAnalyzing}
-              >
-                <span className="focus__demo-name">{demo.label}</span>
-                <span className="focus__demo-hint">{demo.hint}</span>
-              </button>
-            ))}
-          </div>
+    <div className="focus__split">
+      <section className="focus__copy-col">
+        <header className="focus__header">
+          <span className="kicker"><span style={{ color: 'var(--ok)' }}>●</span> Live · Free audit</span>
+          <h1 className="focus__title">See your page like an AI does.</h1>
+          <p className={`focus__sub focus__sub--${view}`} key={view}>
+            {VIEW_COPY[view]}
+          </p>
+        </header>
+
+        <div className="focus__toggle" role="tablist" aria-label="View mode">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={!isAi}
+            className={`focus__toggle-btn${!isAi ? ' is-active' : ''}`}
+            onMouseEnter={() => setView('human')}
+            onFocus={() => setView('human')}
+            onClick={() => setView('human')}
+          >Human view</button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={isAi}
+            className={`focus__toggle-btn${isAi ? ' is-active' : ''}`}
+            onMouseEnter={() => setView('ai')}
+            onFocus={() => setView('ai')}
+            onClick={() => setView('ai')}
+          >AI view</button>
         </div>
-      </div>
+
+        <div className="focus__form">
+          <UrlInput
+            url={url}
+            onUrlChange={setUrl}
+            onFetchComplete={handleFetchComplete}
+            autoFetchToken={autoFetchToken}
+          />
+
+          <div className="focus__samples">
+            <span className="focus__samples-label">Try a sample</span>
+            <div className="focus__samples-row">
+              {SAMPLE_URLS.map(s => (
+                <button
+                  key={s}
+                  type="button"
+                  className="chip focus__sample"
+                  onClick={() => handleSampleClick(s)}
+                  disabled={contentAnalyzing}
+                >
+                  {s.replace(/^https?:\/\/(www\.)?/, '')}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {contentAnalyzing && (
+            <span className="kicker">Analyzing baseline content signals…</span>
+          )}
+        </div>
+      </section>
+
+      <aside className={`focus__preview${isAi ? ' is-ai' : ''}`} aria-hidden="true">
+        <div className="focus__preview-glow" />
+
+        <div className="focus__preview-head">
+          <span className="focus__preview-eyebrow">Preview</span>
+          <span className={`focus__preview-status focus__preview-status--${isAi ? 'warn' : 'ok'}`}>
+            <span className="focus__preview-status-dot" />
+            {isAi ? 'Citation gaps' : 'Reads cleanly'}
+          </span>
+        </div>
+
+        <div className="focus__preview-card">
+          <div className="focus__preview-kicker">
+            {isAi ? 'Important context may be invisible' : 'Content appears complete'}
+          </div>
+
+          <div className="mini-nav" />
+          <div className="mini-line" />
+          <div className="mini-line mini-line--mid" />
+          <div className="mini-line mini-line--short" />
+
+          <div className="mini-box">
+            <span className="mini-box-label">{isAi ? 'Hero blocked from crawlers' : 'Hero · headline + image'}</span>
+          </div>
+
+          <div className="mini-meter" aria-hidden="true">
+            <span className="mini-meter-track">
+              <span className="mini-meter-fill" />
+            </span>
+            <span className="mini-meter-label">
+              {isAi ? '38 / 100 citation-ready' : '92 / 100 reads cleanly'}
+            </span>
+          </div>
+
+          {isAi ? (
+            <div className="mini-signals">
+              <div className="mini-signal mini-signal--fail">
+                <span className="mini-signal-icon">✕</span>
+                <span className="mini-signal-text">Schema · not found</span>
+              </div>
+              <div className="mini-signal mini-signal--fail">
+                <span className="mini-signal-icon">✕</span>
+                <span className="mini-signal-text">Meta description · absent</span>
+              </div>
+              <div className="mini-signal mini-signal--warn">
+                <span className="mini-signal-icon">!</span>
+                <span className="mini-signal-text">Alt text · 0 of 8</span>
+              </div>
+              <div className="mini-signal mini-signal--fail">
+                <span className="mini-signal-icon">✕</span>
+                <span className="mini-signal-text">JS render · blocked</span>
+              </div>
+              <div className="mini-signal mini-signal--warn">
+                <span className="mini-signal-icon">!</span>
+                <span className="mini-signal-text">Author / date · absent</span>
+              </div>
+              <div className="mini-signal mini-signal--fail">
+                <span className="mini-signal-icon">✕</span>
+                <span className="mini-signal-text">Canonical URL · none</span>
+              </div>
+            </div>
+          ) : (
+            <>
+              <div className="mini-grid">
+                <div className="mini-callout">Readable layout, images, and context make sense in a normal browser.</div>
+                <div className="mini-callout">Users see a complete page with supporting sections and visual hierarchy.</div>
+              </div>
+              <div className="mini-line mini-line--hidden" />
+            </>
+          )}
+        </div>
+      </aside>
     </div>
   )
 }
