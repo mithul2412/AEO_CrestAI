@@ -40,7 +40,11 @@ function mergeResultsWithBaseline(nextResults, baselineResults) {
   return {
     ...merged,
     overallScore: computeOverallScore(merged),
-    gapScore: merged.gapScore ?? (merged.queryScore != null ? merged.contentScore - merged.queryScore : null),
+    gapScore: merged.gapScore ?? (
+      typeof merged.contentScore === 'number' && typeof merged.queryScore === 'number'
+        ? merged.contentScore - merged.queryScore
+        : null
+    ),
   }
 }
 
