@@ -329,21 +329,42 @@ router.post('/competitor-query', async (req, res) => {
   try {
     const result = await runSingleJsonModel({
       model: getQwenModel(),
-      prompt: 'Extract the primary company or brand name from this webpage. Return ONLY valid JSON: { "brand": "<company name>" }. Use the page title and H1. Do not include generic words like pricing, blog, home, help, or docs.',
+      prompt: `Analyze this webpage and generate 2-3 natural search queries a potential customer would ask.
+
+Rules:
+1. queries[0] MUST follow this exact pattern: "How does <brand> compare to its <specific competition>?" — name the specific category (e.g. "payroll software" or "CRM platforms"), NOT the word "competitors"
+2. Add 1-2 more queries covering different angles: features, use cases, pricing, or who it is for
+3. Brand name must exclude generic words: pricing, blog, home, help, docs, solutions, platform
+
+Return ONLY valid JSON: { "brand": "<name>", "queries": ["<q1>", "<q2>", "<q3>"] }`,
       content: [
         `URL: ${sourceUrl}`,
         `Title: ${pageIntelligence?.extraction?.title || ''}`,
         `H1: ${pageIntelligence?.extraction?.h1 || ''}`,
-        `Content:\n${markdown.slice(0, 800)}`,
+        `Content:\n${markdown.slice(0, 1000)}`,
       ].join('\n'),
-      normalize: (_model, parsed) => ({ brand: String(parsed?.brand || '').trim() }),
-      maxTokens: 60,
-      temperature: 0,
+      normalize: (_model, parsed) => ({
+        brand: String(parsed?.brand || '').trim(),
+        queries: Array.isArray(parsed?.queries)
+          ? parsed.queries.map(q => sanitizeQueryString(String(q))).filter(q => q.length >= 10)
+          : [],
+      }),
+      maxTokens: 220,
+      temperature: 0.3,
     })
+
     const brand = result.brand || heuristicBrand
-    return res.json({ query: `How does ${brand} compare to its competitors?` })
+    const raw = result.queries || []
+
+    // Guarantee first query is the comparison one; find it or build it from brand + first query's competition word
+    const compIdx = raw.findIndex(q => /compare|vs\b|versus/i.test(q))
+    const compQuery = compIdx >= 0 ? raw[compIdx] : `How does ${brand} compare to its competitors?`
+    const others = raw.filter((_, i) => i !== compIdx).slice(0, 2)
+    const queries = [compQuery, ...others]
+
+    return res.json({ queries })
   } catch {
-    return res.json({ query: `How does ${heuristicBrand} compare to its competitors?` })
+    return res.json({ queries: [`How does ${heuristicBrand} compare to its competitors?`] })
   }
 })
 
