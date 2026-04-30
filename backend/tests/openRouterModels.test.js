@@ -36,10 +36,12 @@ test('safeJsonParse extracts a JSON object from wrapped model text', () => {
 test('OpenRouter credential pool keeps labeled fallback keys in order', () => {
   expect(getOpenRouterCredentials({
     OPENROUTER_API_KEY: 'primary-key',
+    OPENROUTER_API_KEY_24: 'twenty-four-key',
     OPENROUTER_API_KEY_UW_MAIL: 'uw-key',
     OPENROUTER_API_KEY_PERSONAL: 'personal-key',
   })).toEqual([
     { label: 'primary', apiKey: 'primary-key' },
+    { label: '24', apiKey: 'twenty-four-key' },
     { label: 'uw-mail', apiKey: 'uw-key' },
     { label: 'personal', apiKey: 'personal-key' },
   ])

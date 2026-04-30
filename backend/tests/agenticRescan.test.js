@@ -17,6 +17,11 @@ const fixtureMarkdown = fs.readFileSync(path.join(__dirname, 'fixtures', 'agenti
 let portCounter = 5300
 const originalEnableFlag = process.env.ENABLE_AGENTIC_LAYER
 const originalBaseUrl = process.env.AGENTIC_PROFILE_BASE_URL
+const originalOpenRouterKeys = {
+  OPENROUTER_API_KEY: process.env.OPENROUTER_API_KEY,
+  OPENROUTER_API_KEY_UW_MAIL: process.env.OPENROUTER_API_KEY_UW_MAIL,
+  OPENROUTER_API_KEY_PERSONAL: process.env.OPENROUTER_API_KEY_PERSONAL,
+}
 
 function createApp() {
   const app = express()
@@ -76,6 +81,9 @@ async function seedProfile(app) {
 beforeEach(() => {
   process.env.ENABLE_AGENTIC_LAYER = 'true'
   process.env.AGENTIC_PROFILE_BASE_URL = 'http://localhost:3001/agent'
+  delete process.env.OPENROUTER_API_KEY
+  delete process.env.OPENROUTER_API_KEY_UW_MAIL
+  delete process.env.OPENROUTER_API_KEY_PERSONAL
   resetAgenticStoreForTests()
   clearProfiles()
   clearApprovalRequests()
@@ -92,6 +100,14 @@ afterAll(() => {
     delete process.env.AGENTIC_PROFILE_BASE_URL
   } else {
     process.env.AGENTIC_PROFILE_BASE_URL = originalBaseUrl
+  }
+
+  for (const [key, value] of Object.entries(originalOpenRouterKeys)) {
+    if (value === undefined) {
+      delete process.env[key]
+    } else {
+      process.env[key] = value
+    }
   }
 })
 
@@ -125,6 +141,16 @@ test('rescan with unchanged markdown returns no-op and stores monitoring metadat
     monitoring: {
       lastRescanStatus: 'no_changes',
     },
+    feedback: {
+      ruleBased: expect.objectContaining({
+        status: 'no_changes',
+        summary: 'Rescan completed with no profile changes detected.',
+        changed: false,
+      }),
+      llm: expect.objectContaining({
+        status: 'disabled',
+      }),
+    },
   })
   expect(stored.version).toBe(1)
   expect(stored.monitoring).toMatchObject({
@@ -154,6 +180,13 @@ test('rescan with low-risk content change auto-publishes profile update', async 
     validation: expect.objectContaining({ ok: true }),
     monitoring: expect.objectContaining({
       lastRescanStatus: 'auto_published',
+    }),
+    feedback: expect.objectContaining({
+      ruleBased: expect.objectContaining({
+        status: 'auto_published',
+        autoPublishableCount: 1,
+      }),
+      message: expect.stringContaining('low-risk change'),
     }),
   })
   expect(data.changes).toEqual([
@@ -193,6 +226,13 @@ test('rescan with pricing change creates approval and does not publish', async (
     }),
     monitoring: expect.objectContaining({
       lastRescanStatus: 'approval_required',
+    }),
+    feedback: expect.objectContaining({
+      ruleBased: expect.objectContaining({
+        status: 'approval_required',
+        approvalRequiredCount: 1,
+      }),
+      message: expect.stringContaining('require approval'),
     }),
   })
   expect(data.changes).toEqual(expect.arrayContaining([

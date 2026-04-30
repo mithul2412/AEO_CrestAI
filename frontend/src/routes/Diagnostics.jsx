@@ -7,10 +7,9 @@ import CompetitorMindmap from '../components/CompetitorMindmap.jsx'
 import { getCompetitorPosition, getModelConsensus } from '../utils/diagnosticBrief.js'
 
 const TABS = [
-  { id: 'verdict', label: 'Verdict & Fix' },
+  { id: 'verdict', label: 'Verdict' },
   { id: 'answer', label: 'Answer Path' },
-  { id: 'competitor', label: 'Competitor Map' },
-  { id: 'models', label: 'Model Reads' },
+  { id: 'market', label: 'Market' },
 ]
 
 function tone(score) {
@@ -75,28 +74,6 @@ function ChunkMinimap({ chunks, activeId }) {
   )
 }
 
-function CompareCell({ label, chunk }) {
-  return (
-    <div className="compare-cell">
-      <span className="kicker">{label}</span>
-      {chunk ? (
-        <>
-          <span className="compare-cell__title">{chunk.section || chunk.chunkId}</span>
-          <p className="compare-cell__text">
-            {(chunk.text || '').slice(0, 240)}{(chunk.text || '').length > 240 ? '…' : ''}
-          </p>
-          <div className="chunk-card__meta">
-            <span>{chunk.retrievalScore ?? Math.round((chunk.similarity || 0) * 100)} score</span>
-            <span>{chunk.directAnswer ? 'Direct' : 'Indirect'}</span>
-          </div>
-        </>
-      ) : (
-        <p className="compare-cell__text muted">No chunk available.</p>
-      )}
-    </div>
-  )
-}
-
 function VerdictTab({ citation, fix, sendFixToRewrite }) {
   const signals = subscoreSignals(citation?.subscores || {})
   return (
@@ -136,7 +113,7 @@ function VerdictTab({ citation, fix, sendFixToRewrite }) {
       </section>
 
       <section className="section">
-        <div className="section__head">
+        <div className="section__head section__head--fix">
           <div className="section__head-titles">
             <span className="kicker">Highest-impact fix</span>
             <h2 className="h-2">{fix?.fix || 'A prioritized fix will appear after query scoring.'}</h2>
@@ -306,21 +283,6 @@ function CompetitorMapTab({ competitorMap, competitor, competitorPosition, searc
         <CompetitorMindmap data={competitorMap} brandLabel={brandLabel} />
       </section>
 
-      {competitor?.gap?.status === 'ok' && (
-        <section className="section">
-          <div className="section__head">
-            <div className="section__head-titles">
-              <span className="kicker">Top-chunk comparison</span>
-              <h2 className="h-2">Your strongest chunk vs. the best readable competitor chunk.</h2>
-            </div>
-          </div>
-          <div className="compare-grid">
-            <CompareCell label="Your top chunk" chunk={competitor.gap.userTopChunk} />
-            <CompareCell label="Best competitor chunk" chunk={competitor.gap.competitorTopChunk} />
-          </div>
-        </section>
-      )}
-
       {searchPresence && searchPresence.status === 'ok' && (
         <div className="callout">
           <span className="callout__metric">
@@ -391,6 +353,28 @@ function ModelReadsTab({ verdicts, consensus, modelStatus }) {
   )
 }
 
+function AnswerPathWithModels({
+  retrieval, answer, chunks,
+  evidenceOpen, setEvidenceOpen,
+  minimapChunks, activeChunkId,
+  verdicts, consensus, modelStatus,
+}) {
+  return (
+    <div className="vstack" style={{ gap: 'var(--s-6)' }}>
+      <AnswerPathTab
+        retrieval={retrieval}
+        answer={answer}
+        chunks={chunks}
+        evidenceOpen={evidenceOpen}
+        setEvidenceOpen={setEvidenceOpen}
+        minimapChunks={minimapChunks}
+        activeChunkId={activeChunkId}
+      />
+      <ModelReadsTab verdicts={verdicts} consensus={consensus} modelStatus={modelStatus} />
+    </div>
+  )
+}
+
 export default function Diagnostics() {
   const navigate = useNavigate()
   const {
@@ -456,9 +440,23 @@ export default function Diagnostics() {
         title="Diagnostics locked — add a target query"
         copy="Retrieval, answer extraction, competitor gap, and the highest-impact fix all unlock once a target query is scored."
         action={
-          <button type="button" className="btn btn--sm" onClick={() => navigate('/')}>
-            Add a query
-          </button>
+          <div className="hstack" style={{ gap: 'var(--s-2)' }}>
+            <button type="button" className="btn btn--sm" onClick={() => navigate('/')}>
+              Back to Overview
+            </button>
+            <button
+              type="button"
+              className="btn btn--sm btn--ghost"
+              onClick={() => {
+                navigate('/')
+                requestAnimationFrame(() => {
+                  document.getElementById('query-input')?.focus()
+                })
+              }}
+            >
+              Add a query
+            </button>
+          </div>
         }
       />
     )
@@ -532,7 +530,7 @@ export default function Diagnostics() {
           <VerdictTab citation={citation} fix={fix} sendFixToRewrite={sendFixToRewrite} />
         )}
         {activeTab === 'answer' && (
-          <AnswerPathTab
+          <AnswerPathWithModels
             retrieval={retrieval}
             answer={answer}
             chunks={chunks}
@@ -540,9 +538,12 @@ export default function Diagnostics() {
             setEvidenceOpen={setEvidenceOpen}
             minimapChunks={minimapChunks}
             activeChunkId={activeChunkId}
+            verdicts={verdicts}
+            consensus={consensus}
+            modelStatus={modelStatus}
           />
         )}
-        {activeTab === 'competitor' && (
+        {activeTab === 'market' && (
           <CompetitorMapTab
             competitorMap={competitorMap}
             competitor={competitor}
@@ -550,9 +551,6 @@ export default function Diagnostics() {
             searchPresence={searchPresence}
             brandLabel={brandLabel || 'Your page'}
           />
-        )}
-        {activeTab === 'models' && (
-          <ModelReadsTab verdicts={verdicts} consensus={consensus} modelStatus={modelStatus} />
         )}
       </div>
     </div>
