@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { readApiError } from '../utils/api.js'
-import InfinityLoop from './InfinityLoop.jsx'
+import { LoaderThree } from './ui/loader.jsx'
 
 function normalizeUrlInput(input) {
   const raw = input.trim()
@@ -9,7 +9,7 @@ function normalizeUrlInput(input) {
   return `https://${raw.replace(/^\/+/, '')}`
 }
 
-export default function UrlInput({ url, onUrlChange, onFetchComplete }) {
+export default function UrlInput({ url, onUrlChange, onFetchComplete, autoFetchToken = 0 }) {
   const [fetching, setFetching] = useState(false)
   const [preview, setPreview] = useState('')
   const [charCount, setCharCount] = useState(0)
@@ -20,6 +20,7 @@ export default function UrlInput({ url, onUrlChange, onFetchComplete }) {
   const [streamState, setStreamState] = useState('idle')
   const [error, setError] = useState('')
   const eventSourceRef = useRef(null)
+  const handleFetchRef = useRef(null)
 
   const closeStream = useCallback(() => {
     eventSourceRef.current?.close()
@@ -27,6 +28,15 @@ export default function UrlInput({ url, onUrlChange, onFetchComplete }) {
   }, [])
 
   useEffect(() => () => closeStream(), [closeStream])
+
+  // Demo URL chip / RunHeader can request a fetch by bumping autoFetchToken.
+  useEffect(() => {
+    if (!autoFetchToken) return
+    const timer = requestAnimationFrame(() => {
+      handleFetchRef.current?.()
+    })
+    return () => cancelAnimationFrame(timer)
+  }, [autoFetchToken])
 
   const handleFetch = useCallback(async () => {
     const normalizedUrl = normalizeUrlInput(url)
@@ -139,6 +149,9 @@ export default function UrlInput({ url, onUrlChange, onFetchComplete }) {
     }
   }, [closeStream, onFetchComplete, onUrlChange, url])
 
+  // Keep ref pointing at the latest handleFetch closure (which captures the latest url).
+  handleFetchRef.current = handleFetch
+
   return (
     <div>
       <div className="url-row">
@@ -155,9 +168,7 @@ export default function UrlInput({ url, onUrlChange, onFetchComplete }) {
           onClick={handleFetch}
           disabled={fetching}
         >
-          {fetching
-            ? <><InfinityLoop className="infinity-loop-button" title="Accessing page content" /> Accessing...</>
-            : 'Fetch Page'}
+          {fetching ? 'Accessing...' : 'Fetch Page'}
         </button>
       </div>
 
@@ -173,7 +184,7 @@ export default function UrlInput({ url, onUrlChange, onFetchComplete }) {
         {(fetching || fetchDone) && (
           <span className="fetch-inline-meta">
             {fetching
-              ? <><InfinityLoop className="infinity-loop-inline" title="Reading page content" /> Reading page content...</>
+              ? <><LoaderThree /> Reading page content...</>
               : `${charCount.toLocaleString()} chars${chunkCount > 0 ? ` · ${chunkCount} chunks` : ''}`}
           </span>
         )}

@@ -197,6 +197,47 @@ export function packContextForBaseline({
   return [skeleton, packed].filter(Boolean).join('\n\n')
 }
 
+export function packContextForSuggestions({
+  markdown = '',
+  pageIntelligence = {},
+  pageType = 'commercial',
+  budgetTokens = 2000,
+  isNoiseSection = () => false,
+}) {
+  const totalWordBudget = tokensToWords(budgetTokens)
+  const skeleton = buildSkeleton({ pageIntelligence, markdown, maxLines: 8 })
+  const skeletonWords = wordCount(skeleton)
+  const remaining = Math.max(0, totalWordBudget - skeletonWords - 20)
+
+  const chunks = chunkMarkdown(normalizeMarkdown(markdown))
+  if (chunks.length === 0) {
+    return `${skeleton}\n\n[NO RETRIEVABLE CHUNKS]`
+  }
+
+  // For reference / faq pages, the lede + first body section is what defines the topic.
+  // Section-diverse sampling pulls in "See Also" / "Further Reading" which steers the LLM
+  // toward generic recommendations. Front-load the top-of-page chunks instead.
+  const filtered = chunks.filter(chunk => !isNoiseSection(chunk.section))
+  const ordered = (pageType === 'reference' || pageType === 'faq')
+    ? filtered.sort((a, b) => (a.position || 0) - (b.position || 0)).slice(0, 4)
+    : filtered.slice(0, 6)
+
+  const header = pageType === 'reference'
+    ? '[TOP OF PAGE — definitional content]'
+    : pageType === 'faq'
+      ? '[TOP OF PAGE — FAQ content]'
+      : '[STRUCTURAL SAMPLE — section openings]'
+
+  const packed = packChunks({
+    chunks: ordered,
+    budgetWords: remaining,
+    header,
+    formatChunk: formatSampledChunk,
+  })
+
+  return [skeleton, packed].filter(Boolean).join('\n\n')
+}
+
 export function packContextForChat({
   markdown = '',
   query = '',

@@ -142,6 +142,7 @@ function TypingBubble({ label, modelClass }) {
 }
 
 function ModelResponse({ model, response }) {
+  if (response?.status === 'skipped') return null
   if (!response || response.status === 'pending') {
     return <TypingBubble label={model.id} modelClass={model.className} />
   }
@@ -178,15 +179,23 @@ function ModelResponse({ model, response }) {
   )
 }
 
-function emptyResponses() {
+function emptyResponses(selectedIds = MODELS.map(m => m.id)) {
+  const set = new Set(selectedIds)
   return MODELS.reduce((accumulator, model) => {
-    accumulator[model.id] = { status: 'pending' }
+    accumulator[model.id] = set.has(model.id)
+      ? { status: 'pending' }
+      : { status: 'skipped' }
     return accumulator
   }, {})
 }
 
-function mapApiResponses(responses = []) {
+function mapApiResponses(responses = [], selectedIds = MODELS.map(m => m.id)) {
+  const set = new Set(selectedIds)
   return MODELS.reduce((accumulator, model) => {
+    if (!set.has(model.id)) {
+      accumulator[model.id] = { status: 'skipped' }
+      return accumulator
+    }
     const found = responses.find(response => response.model === model.id)
     accumulator[model.id] = found
       ? { status: 'ok', content: found.response }
@@ -211,6 +220,8 @@ export default function Chat({
   draftToken = 0,
   pageIntelligence = null,
   fixSource = '',
+  querySuggestions = [],
+  querySuggestionsLoading = false,
 }) {
   const [turns, setTurns] = useState([])
   const [input, setInput] = useState('')
@@ -219,7 +230,18 @@ export default function Chat({
   const [showTemplate, setShowTemplate] = useState(false)
   const [viewModel, setViewModel] = useState(MODELS[0].className)
   const [draftNotice, setDraftNotice] = useState('')
+  const [selectedModelIds, setSelectedModelIds] = useState(MODELS.map(model => model.id))
   const bottomRef = useRef(null)
+
+  const toggleModel = (id) => {
+    setSelectedModelIds(prev => {
+      if (prev.includes(id)) {
+        // Don't allow zero-selection: must keep at least one model on.
+        return prev.length === 1 ? prev : prev.filter(value => value !== id)
+      }
+      return [...prev, id]
+    })
+  }
 
   const chips = STAGE_SUGGESTIONS[stage] || STAGE_SUGGESTIONS['post-fetch']
   const stageMeta = STAGE_META[stage] || STAGE_META['post-fetch']
@@ -228,6 +250,13 @@ export default function Chat({
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [turns, sending])
+
+  useEffect(() => {
+    const activeIsSelected = MODELS.some(model => model.className === viewModel && selectedModelIds.includes(model.id))
+    if (activeIsSelected) return
+    const firstSelected = MODELS.find(model => selectedModelIds.includes(model.id))
+    if (firstSelected) setViewModel(firstSelected.className)
+  }, [selectedModelIds, viewModel])
 
   useEffect(() => {
     if (!draftToken || !draft) return
@@ -243,7 +272,7 @@ export default function Chat({
     setError('')
 
     const turnId = `${Date.now()}-${Math.random().toString(16).slice(2)}`
-    const newTurn = { id: turnId, prompt: userText, responses: emptyResponses() }
+    const newTurn = { id: turnId, prompt: userText, responses: emptyResponses(selectedModelIds) }
     setTurns(prev => [...prev, newTurn])
     setSending(true)
 
@@ -268,7 +297,7 @@ export default function Chat({
       const res = await fetch('/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages: history, markdown, query, pageIntelligence })
+        body: JSON.stringify({ messages: history, markdown, query, pageIntelligence, selectedModels: selectedModelIds })
       })
 
       if (!res.ok) {
@@ -276,11 +305,14 @@ export default function Chat({
       }
 
       const data = await res.json()
-      const mapped = mapApiResponses(data.responses || [])
+      const mapped = mapApiResponses(data.responses || [], selectedModelIds)
       setTurns(prev => prev.map(turn => turn.id === turnId ? { ...turn, responses: mapped } : turn))
     } catch (e) {
+      const set = new Set(selectedModelIds)
       const errorResponses = MODELS.reduce((accumulator, model) => {
-        accumulator[model.id] = { status: 'err', error: e.message }
+        accumulator[model.id] = set.has(model.id)
+          ? { status: 'err', error: e.message }
+          : { status: 'skipped' }
         return accumulator
       }, {})
       setTurns(prev => prev.map(turn => turn.id === turnId ? { ...turn, responses: errorResponses } : turn))
@@ -311,7 +343,7 @@ export default function Chat({
         {hasAnyResponse && (
           <div className="chat-panel-header-right">
             <div className="model-seg-ctrl" role="group" aria-label="Select model">
-              {MODELS.map(model => (
+              {MODELS.filter(model => selectedModelIds.includes(model.id)).map(model => (
                 <button
                   key={model.id}
                   type="button"
@@ -324,6 +356,31 @@ export default function Chat({
             </div>
           </div>
         )}
+      </div>
+
+      <div className="chat-model-picker" role="group" aria-label="Models to query">
+        <span className="chat-model-picker__label">Models</span>
+        <div className="chat-model-picker__chips">
+          {MODELS.map(model => {
+            const pressed = selectedModelIds.includes(model.id)
+            return (
+              <button
+                key={model.id}
+                type="button"
+                className="chat-model-chip"
+                aria-pressed={pressed}
+                onClick={() => toggleModel(model.id)}
+                title={pressed ? `Disable ${model.label}` : `Enable ${model.label}`}
+              >
+                <span className="chat-model-chip__dot" aria-hidden="true" />
+                {model.label}
+              </button>
+            )
+          })}
+        </div>
+        <span className="chat-model-picker__hint">
+          {selectedModelIds.length === MODELS.length ? 'All models on' : `${selectedModelIds.length} of ${MODELS.length} on`}
+        </span>
       </div>
 
       <div className="chat-context-strip">
@@ -340,6 +397,27 @@ export default function Chat({
           <strong>{fixSource || (draft ? 'Diagnostics draft' : 'Chat prompt')}</strong>
         </div>
       </div>
+
+      {!hasTurns && (querySuggestionsLoading || querySuggestions.length > 0) && (
+        <div className="suggestion-row">
+          {querySuggestionsLoading && (
+            <span className="caption" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <WanderingEyes className="wandering-eyes-chat" title="Generating suggestions" />
+              Generating target queries…
+            </span>
+          )}
+          {!querySuggestionsLoading && querySuggestions.map(tip => (
+            <button
+              key={tip}
+              className="chip"
+              type="button"
+              onClick={() => setInput(`Improve this page to answer: "${tip}"`)}
+            >
+              {tip}
+            </button>
+          ))}
+        </div>
+      )}
 
       {!hasTurns && (
         <div className="chat-panel-chips">

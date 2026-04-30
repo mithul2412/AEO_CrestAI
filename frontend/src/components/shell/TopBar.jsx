@@ -1,4 +1,4 @@
-import { Link } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import Wordmark from './Wordmark.jsx'
 import { useRun } from '../../state/RunContext.jsx'
 
@@ -20,7 +20,14 @@ function ThemeIcon({ theme }) {
 
 export default function TopBar() {
   const { theme, setTheme, hasFetched, startNewTest } = useRun()
+  const navigate = useNavigate()
+  const location = useLocation()
   const isDark = theme === 'dark'
+
+  const handleNewTest = () => {
+    startNewTest()
+    if (location.pathname !== '/') navigate('/')
+  }
 
   return (
     <header className="topbar">
@@ -33,7 +40,7 @@ export default function TopBar() {
         <button
           type="button"
           className="btn btn--ghost btn--sm"
-          onClick={startNewTest}
+          onClick={handleNewTest}
           disabled={!hasFetched}
         >
           New test
