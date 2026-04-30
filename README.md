@@ -174,6 +174,7 @@ Backend expects:
 
 ```bash
 OPENROUTER_API_KEY=...
+OPENROUTER_API_KEY_24=... # optional fallback OpenRouter key
 JINA_API_KEY=... # optional
 TAVILY_API_KEY=... # optional, enables competitor and search evidence
 PORT=3001
@@ -208,4 +209,3 @@ It is strongest when used for:
 - The scoring system is intentionally explainable and transparent.
 - Some scores are deterministic and rule-based; others come from model judgment.
 - The product is designed to support content review, not replace editorial judgment.
-
