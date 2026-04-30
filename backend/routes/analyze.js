@@ -7,7 +7,7 @@ import { generateHighestImpactFix } from '../services/fixGeneratorService.js'
 import { buildCompetitorCorpus } from '../services/competitorCorpusService.js'
 import { compareUserVsCompetitors } from '../services/competitorGapService.js'
 import { buildCompetitorMap } from '../services/competitorMapService.js'
-import { averageScores, deriveScoreConfidence, getLlamaQueryModel, runJsonModelPanel, runSingleJsonModel, OPENROUTER_MODELS } from '../services/openRouterModels.js'
+import { averageScores, deriveScoreConfidence, getLlamaQueryModel, getQwenModel, runJsonModelPanel, runSingleJsonModel, OPENROUTER_MODELS } from '../services/openRouterModels.js'
 import { buildQueryDiscovery, detectPageType, fallbackQueriesForPageType, isReferenceNoiseSection } from '../services/queryDiscoveryService.js'
 import { packContextForBaseline, packContextForQuery, packContextForSuggestions } from '../services/contextPacker.js'
 
@@ -317,6 +317,33 @@ router.post('/query-suggestions', async (req, res) => {
       category,
       error: err?.message || 'Query suggestions unavailable',
     })
+  }
+})
+
+router.post('/competitor-query', async (req, res) => {
+  const { markdown = '', sourceUrl = '', pageIntelligence = {} } = req.body || {}
+  if (!markdown) return res.status(400).json({ error: 'markdown required' })
+
+  const heuristicBrand = pageBrandFromSource(sourceUrl, pageIntelligence)
+
+  try {
+    const result = await runSingleJsonModel({
+      model: getQwenModel(),
+      prompt: 'Extract the primary company or brand name from this webpage. Return ONLY valid JSON: { "brand": "<company name>" }. Use the page title and H1. Do not include generic words like pricing, blog, home, help, or docs.',
+      content: [
+        `URL: ${sourceUrl}`,
+        `Title: ${pageIntelligence?.extraction?.title || ''}`,
+        `H1: ${pageIntelligence?.extraction?.h1 || ''}`,
+        `Content:\n${markdown.slice(0, 800)}`,
+      ].join('\n'),
+      normalize: (_model, parsed) => ({ brand: String(parsed?.brand || '').trim() }),
+      maxTokens: 60,
+      temperature: 0,
+    })
+    const brand = result.brand || heuristicBrand
+    return res.json({ query: `How does ${brand} compare to its competitors?` })
+  } catch {
+    return res.json({ query: `How does ${heuristicBrand} compare to its competitors?` })
   }
 })
 

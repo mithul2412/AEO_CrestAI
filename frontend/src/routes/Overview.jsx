@@ -218,6 +218,7 @@ export default function Overview() {
     query, setQuery, handleAnalyze, queryAnalyzing, hasBaseline, hasQueryResults,
     url, normalizedUrl, sendDraftToChat,
     handleBaselineAnalyze, sourceSignals,
+    competitorQuery, competitorQueryLoading,
   } = useRun()
 
   const [drillKey, setDrillKey] = useState(null)
@@ -626,14 +627,9 @@ export default function Overview() {
                   : hasQueryResults ? 'Re-run query' : 'Run query test'}
               </button>
             </div>
-            {!hasQueryResults && (
+            {!hasQueryResults && !competitorQueryLoading && competitorQuery && (
               <div className="suggestion-row">
-                {(() => {
-                  const src = pageIntelligence?.extraction?.title || pageIntelligence?.extraction?.h1 || ''
-                  const brand = src.split(/[|–—]/)[0].trim().split(/\s+/).slice(0, 3).join(' ') || 'this brand'
-                  const tip = `How does ${brand} compare to its competitors?`
-                  return <button className="chip" onClick={() => setQuery(tip)}>{tip}</button>
-                })()}
+                <button className="chip" onClick={() => setQuery(competitorQuery)}>{competitorQuery}</button>
               </div>
             )}
             {error && <div className="error-bar">{error}</div>}

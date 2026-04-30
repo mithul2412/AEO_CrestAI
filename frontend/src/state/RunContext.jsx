@@ -63,6 +63,8 @@ export function RunProvider({ children }) {
   const [error, setError] = useState('')
   const [theme, setTheme] = useState(getInitialTheme)
   const [chatDraft, setChatDraft] = useState({ text: '', token: 0 })
+  const [competitorQuery, setCompetitorQuery] = useState(null)
+  const [competitorQueryLoading, setCompetitorQueryLoading] = useState(false)
   const [querySuggestions, setQuerySuggestions] = useState([])
   const [querySuggestionsLoading, setQuerySuggestionsLoading] = useState(false)
   const [querySuggestionsMeta, setQuerySuggestionsMeta] = useState(null)
@@ -121,6 +123,8 @@ export function RunProvider({ children }) {
   const handleBaselineAnalyze = useCallback(async (nextMarkdown, nextSourceSignals = {}, nextPageIntelligence = null, nextNormalizedUrl = '') => {
     setContentAnalyzing(true)
     setError('')
+    setCompetitorQuery(null)
+    setCompetitorQueryLoading(true)
     try {
       const res = await fetch('/analyze', {
         method: 'POST',
@@ -139,6 +143,20 @@ export function RunProvider({ children }) {
     } finally {
       setContentAnalyzing(false)
     }
+
+    fetch('/analyze/competitor-query', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        markdown: nextMarkdown,
+        sourceUrl: nextNormalizedUrl || nextSourceSignals?.sourceUrl || '',
+        pageIntelligence: nextPageIntelligence || {},
+      }),
+    })
+      .then(r => r.json())
+      .then(d => { if (d.query) setCompetitorQuery(d.query) })
+      .catch(() => {})
+      .finally(() => setCompetitorQueryLoading(false))
   }, [generateQuerySuggestions])
 
   const handleFetchComplete = useCallback((nextMarkdown, nextCharCount, nextSourceSignals = {}, nextPageIntelligence = null, nextNormalizedUrl = '') => {
@@ -201,6 +219,8 @@ export function RunProvider({ children }) {
     setResults(null)
     setError('')
     setChatDraft({ text: '', token: 0 })
+    setCompetitorQuery(null)
+    setCompetitorQueryLoading(false)
   }, [])
 
   const sendDraftToChat = useCallback((draft) => {
@@ -218,6 +238,7 @@ export function RunProvider({ children }) {
     query, theme, baselineResults, results, activeResults,
     contentAnalyzing, queryAnalyzing, error,
     chatDraft, querySuggestions, querySuggestionsLoading, querySuggestionsMeta,
+    competitorQuery, competitorQueryLoading,
 
     // derived
     hasFetched, hasBaseline, hasQueryResults,
@@ -232,6 +253,7 @@ export function RunProvider({ children }) {
     url, normalizedUrl, markdown, charCount, sourceSignals, pageIntelligence,
     query, theme, baselineResults, results, activeResults,
     contentAnalyzing, queryAnalyzing, error, chatDraft, querySuggestions, querySuggestionsLoading, querySuggestionsMeta,
+    competitorQuery, competitorQueryLoading,
     hasFetched, hasBaseline, hasQueryResults,
     handleFetchComplete, handleAnalyze, handleBaselineAnalyze, generateQuerySuggestions,
     startNewTest, sendDraftToChat,
