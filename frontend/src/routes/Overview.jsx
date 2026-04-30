@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { WanderingEyes } from '../components/loading-ui/wandering-eyes.jsx'
 import { useNavigate } from 'react-router-dom'
 import UrlInput from '../components/UrlInput.jsx'
 import { useRun } from '../state/RunContext.jsx'
@@ -442,7 +443,9 @@ export default function Overview() {
                 onClick={handleAnalyze}
                 disabled={queryAnalyzing || !query.trim() || !hasBaseline}
               >
-                {queryAnalyzing ? 'Analyzing…' : hasQueryResults ? 'Re-run query' : 'Run query test'}
+                {queryAnalyzing
+                  ? <><WanderingEyes style={{ height: '20px', width: '45px', marginRight: '6px' }} /> Analyzing…</>
+                  : hasQueryResults ? 'Re-run query' : 'Run query test'}
               </button>
             </div>
             {!hasQueryResults && (
