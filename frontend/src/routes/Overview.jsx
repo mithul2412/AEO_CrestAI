@@ -311,11 +311,10 @@ export default function Overview() {
             <span className="kicker">Signals</span>
             <h2 className="h-2">{signalView === 'blockers' ? 'What is holding the page back.' : 'What the page is doing well.'}</h2>
           </div>
-          <div className="signal-toggle" role="tablist" aria-label="Signal view">
+          <div className="signal-toggle" role="group" aria-label="Signal view">
             <button
               type="button"
-              role="tab"
-              aria-selected={signalView === 'blockers'}
+              aria-pressed={signalView === 'blockers'}
               className={`signal-toggle__btn${signalView === 'blockers' ? ' signal-toggle__btn--active' : ''}`}
               onClick={() => setSignalView('blockers')}
             >
@@ -323,8 +322,7 @@ export default function Overview() {
             </button>
             <button
               type="button"
-              role="tab"
-              aria-selected={signalView === 'strengths'}
+              aria-pressed={signalView === 'strengths'}
               className={`signal-toggle__btn${signalView === 'strengths' ? ' signal-toggle__btn--active' : ''}`}
               onClick={() => setSignalView('strengths')}
             >

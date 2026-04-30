@@ -106,9 +106,11 @@ export function normalizeQuerySuggestionsPayload(model, parsed, fallback = []) {
     })
     .slice(0, 3)
 
+  const usedFallback = queries.length < 3
   return {
     model,
-    queries: queries.length === 3 ? queries : fallback,
+    queries: usedFallback ? fallback : queries,
+    fallback: usedFallback,
   }
 }
 
@@ -274,7 +276,7 @@ router.post('/query-suggestions', async (req, res) => {
       model: result.model,
       modelId: result.modelId,
       credentialLabel: result.credentialLabel,
-      fallback: false,
+      fallback: Boolean(result.fallback),
     })
   } catch (err) {
     return res.json({
