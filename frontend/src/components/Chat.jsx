@@ -220,8 +220,6 @@ export default function Chat({
   draftToken = 0,
   pageIntelligence = null,
   fixSource = '',
-  querySuggestions = [],
-  querySuggestionsLoading = false,
 }) {
   const [turns, setTurns] = useState([])
   const [input, setInput] = useState('')
@@ -397,27 +395,6 @@ export default function Chat({
           <strong>{fixSource || (draft ? 'Diagnostics draft' : 'Chat prompt')}</strong>
         </div>
       </div>
-
-      {!hasTurns && (querySuggestionsLoading || querySuggestions.length > 0) && (
-        <div className="suggestion-row">
-          {querySuggestionsLoading && (
-            <span className="caption" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <WanderingEyes className="wandering-eyes-chat" title="Generating suggestions" />
-              Generating target queries…
-            </span>
-          )}
-          {!querySuggestionsLoading && querySuggestions.map(tip => (
-            <button
-              key={tip}
-              className="chip"
-              type="button"
-              onClick={() => setInput(`Improve this page to answer: "${tip}"`)}
-            >
-              {tip}
-            </button>
-          ))}
-        </div>
-      )}
 
       {!hasTurns && (
         <div className="chat-panel-chips">
