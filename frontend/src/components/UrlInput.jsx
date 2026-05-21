@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { readApiError } from '../utils/api.js'
-import { LoaderThree } from './ui/loader.jsx'
+import InfinityLoop from './InfinityLoop.jsx'
 
 function normalizeUrlInput(input) {
   const raw = input.trim()
@@ -9,7 +9,7 @@ function normalizeUrlInput(input) {
   return `https://${raw.replace(/^\/+/, '')}`
 }
 
-export default function UrlInput({ url, onUrlChange, onFetchComplete, autoFetchToken = 0 }) {
+export default function UrlInput({ url, onUrlChange, onFetchComplete }) {
   const [fetching, setFetching] = useState(false)
   const [preview, setPreview] = useState('')
   const [charCount, setCharCount] = useState(0)
@@ -20,7 +20,6 @@ export default function UrlInput({ url, onUrlChange, onFetchComplete, autoFetchT
   const [streamState, setStreamState] = useState('idle')
   const [error, setError] = useState('')
   const eventSourceRef = useRef(null)
-  const handleFetchRef = useRef(null)
 
   const closeStream = useCallback(() => {
     eventSourceRef.current?.close()
@@ -28,15 +27,6 @@ export default function UrlInput({ url, onUrlChange, onFetchComplete, autoFetchT
   }, [])
 
   useEffect(() => () => closeStream(), [closeStream])
-
-  // Demo URL chip / RunHeader can request a fetch by bumping autoFetchToken.
-  useEffect(() => {
-    if (!autoFetchToken) return
-    const timer = requestAnimationFrame(() => {
-      handleFetchRef.current?.()
-    })
-    return () => cancelAnimationFrame(timer)
-  }, [autoFetchToken])
 
   const handleFetch = useCallback(async () => {
     const normalizedUrl = normalizeUrlInput(url)
@@ -54,7 +44,7 @@ export default function UrlInput({ url, onUrlChange, onFetchComplete, autoFetchT
 
     if (typeof EventSource === 'undefined') {
       try {
-        const res = await fetch(`/fetch?url=${encodeURIComponent(normalizedUrl)}`)
+        const res = await fetch(`/api/v1/fetch?url=${encodeURIComponent(normalizedUrl)}`)
         if (!res.ok) {
           throw new Error(await readApiError(res, `Fetch error: ${res.status}`))
         }
@@ -81,7 +71,7 @@ export default function UrlInput({ url, onUrlChange, onFetchComplete, autoFetchT
 
     let streamedMarkdown = ''
     let finished = false
-    const eventSource = new EventSource(`/fetch?url=${encodeURIComponent(normalizedUrl)}&stream=1`)
+    const eventSource = new EventSource(`/api/v1/fetch?url=${encodeURIComponent(normalizedUrl)}&stream=1`)
     eventSourceRef.current = eventSource
 
     eventSource.addEventListener('status', event => {
@@ -149,9 +139,6 @@ export default function UrlInput({ url, onUrlChange, onFetchComplete, autoFetchT
     }
   }, [closeStream, onFetchComplete, onUrlChange, url])
 
-  // Keep ref pointing at the latest handleFetch closure (which captures the latest url).
-  handleFetchRef.current = handleFetch
-
   return (
     <div>
       <div className="url-row">
@@ -168,7 +155,9 @@ export default function UrlInput({ url, onUrlChange, onFetchComplete, autoFetchT
           onClick={handleFetch}
           disabled={fetching}
         >
-          {fetching ? 'Accessing...' : 'Fetch Page'}
+          {fetching
+            ? <><InfinityLoop className="infinity-loop-button" title="Accessing page content" /> Accessing...</>
+            : 'Fetch Page'}
         </button>
       </div>
 
@@ -184,7 +173,7 @@ export default function UrlInput({ url, onUrlChange, onFetchComplete, autoFetchT
         {(fetching || fetchDone) && (
           <span className="fetch-inline-meta">
             {fetching
-              ? <><LoaderThree /> Reading page content...</>
+              ? <><InfinityLoop className="infinity-loop-inline" title="Reading page content" /> Reading page content...</>
               : `${charCount.toLocaleString()} chars${chunkCount > 0 ? ` · ${chunkCount} chunks` : ''}`}
           </span>
         )}

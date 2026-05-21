@@ -3,9 +3,9 @@ import { readApiError } from '../utils/api.js'
 import WanderingEyes from './WanderingEyes.jsx'
 
 const MODELS = [
-  { id: 'Qwen 3.6 Plus', label: 'Qwen', className: 'qwen' },
-  { id: 'Nemotron 120B', label: 'Nemotron', className: 'nemotron' },
-  { id: 'GPT OSS 120B', label: 'GPT OSS', className: 'gptoss' }
+  { id: 'Qwen', label: 'Qwen', className: 'qwen' },
+  { id: 'Nemotron', label: 'Nemotron', className: 'nemotron' },
+  { id: 'GPT-OSS', label: 'GPT-OSS', className: 'gptoss' },
 ]
 
 const STAGE_SUGGESTIONS = {
@@ -30,14 +30,17 @@ const STAGE_META = {
   'post-fetch': {
     eyebrow: 'Context loaded',
     title: 'Ask for rewrite help from the current page context.',
+    description: '',
   },
   'post-query': {
     eyebrow: 'Query in focus',
     title: 'Rewrite against the exact question.',
+    description: 'Use the query to tighten the answer-first path.',
   },
   'post-verdict': {
     eyebrow: 'Fix First ready',
     title: 'Turn the weakest section into a rewrite.',
+    description: 'Switch models and compare priorities.',
   }
 }
 
@@ -142,7 +145,6 @@ function TypingBubble({ label, modelClass }) {
 }
 
 function ModelResponse({ model, response }) {
-  if (response?.status === 'skipped') return null
   if (!response || response.status === 'pending') {
     return <TypingBubble label={model.id} modelClass={model.className} />
   }
@@ -179,23 +181,15 @@ function ModelResponse({ model, response }) {
   )
 }
 
-function emptyResponses(selectedIds = MODELS.map(m => m.id)) {
-  const set = new Set(selectedIds)
+function emptyResponses() {
   return MODELS.reduce((accumulator, model) => {
-    accumulator[model.id] = set.has(model.id)
-      ? { status: 'pending' }
-      : { status: 'skipped' }
+    accumulator[model.id] = { status: 'pending' }
     return accumulator
   }, {})
 }
 
-function mapApiResponses(responses = [], selectedIds = MODELS.map(m => m.id)) {
-  const set = new Set(selectedIds)
+function mapApiResponses(responses = []) {
   return MODELS.reduce((accumulator, model) => {
-    if (!set.has(model.id)) {
-      accumulator[model.id] = { status: 'skipped' }
-      return accumulator
-    }
     const found = responses.find(response => response.model === model.id)
     accumulator[model.id] = found
       ? { status: 'ok', content: found.response }
@@ -204,23 +198,7 @@ function mapApiResponses(responses = [], selectedIds = MODELS.map(m => m.id)) {
   }, {})
 }
 
-function stageLabel(stage) {
-  return {
-    'post-fetch': 'Baseline',
-    'post-query': 'Query Draft',
-    'post-verdict': 'Fix First',
-  }[stage] || 'Workspace'
-}
-
-export default function Chat({
-  markdown,
-  stage = 'post-fetch',
-  query = '',
-  draft = '',
-  draftToken = 0,
-  pageIntelligence = null,
-  fixSource = '',
-}) {
+export default function Chat({ markdown, stage = 'post-fetch', query = '', draft = '', draftToken = 0 }) {
   const [turns, setTurns] = useState([])
   const [input, setInput] = useState('')
   const [sending, setSending] = useState(false)
@@ -228,18 +206,7 @@ export default function Chat({
   const [showTemplate, setShowTemplate] = useState(false)
   const [viewModel, setViewModel] = useState(MODELS[0].className)
   const [draftNotice, setDraftNotice] = useState('')
-  const [selectedModelIds, setSelectedModelIds] = useState(MODELS.map(model => model.id))
   const bottomRef = useRef(null)
-
-  const toggleModel = (id) => {
-    setSelectedModelIds(prev => {
-      if (prev.includes(id)) {
-        // Don't allow zero-selection: must keep at least one model on.
-        return prev.length === 1 ? prev : prev.filter(value => value !== id)
-      }
-      return [...prev, id]
-    })
-  }
 
   const chips = STAGE_SUGGESTIONS[stage] || STAGE_SUGGESTIONS['post-fetch']
   const stageMeta = STAGE_META[stage] || STAGE_META['post-fetch']
@@ -248,13 +215,6 @@ export default function Chat({
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [turns, sending])
-
-  useEffect(() => {
-    const activeIsSelected = MODELS.some(model => model.className === viewModel && selectedModelIds.includes(model.id))
-    if (activeIsSelected) return
-    const firstSelected = MODELS.find(model => selectedModelIds.includes(model.id))
-    if (firstSelected) setViewModel(firstSelected.className)
-  }, [selectedModelIds, viewModel])
 
   useEffect(() => {
     if (!draftToken || !draft) return
@@ -270,32 +230,27 @@ export default function Chat({
     setError('')
 
     const turnId = `${Date.now()}-${Math.random().toString(16).slice(2)}`
-    const newTurn = { id: turnId, prompt: userText, responses: emptyResponses(selectedModelIds) }
+    const newTurn = { id: turnId, prompt: userText, responses: emptyResponses() }
     setTurns(prev => [...prev, newTurn])
     setSending(true)
 
     try {
       const history = turns.flatMap(turn => {
         const messages = [{ role: 'user', content: turn.prompt }]
-        const modelResponses = MODELS
-          .map(model => {
-            const response = turn.responses[model.id]
-            return response?.status === 'ok' && response.content
-              ? `${model.id}: ${response.content}`
-              : ''
-          })
-          .filter(Boolean)
-        if (modelResponses.length > 0) {
-          messages.push({ role: 'assistant', content: modelResponses.join('\n\n') })
-        }
+        MODELS.forEach(model => {
+          const response = turn.responses[model.id]
+          if (response?.status === 'ok' && response.content) {
+            messages.push({ role: 'assistant', content: response.content })
+          }
+        })
         return messages
       })
       history.push({ role: 'user', content: userText })
 
-      const res = await fetch('/chat', {
+      const res = await fetch('/api/v1/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages: history, markdown, query, pageIntelligence, selectedModels: selectedModelIds })
+        body: JSON.stringify({ messages: history, markdown })
       })
 
       if (!res.ok) {
@@ -303,14 +258,11 @@ export default function Chat({
       }
 
       const data = await res.json()
-      const mapped = mapApiResponses(data.responses || [], selectedModelIds)
+      const mapped = mapApiResponses(data.responses || [])
       setTurns(prev => prev.map(turn => turn.id === turnId ? { ...turn, responses: mapped } : turn))
     } catch (e) {
-      const set = new Set(selectedModelIds)
       const errorResponses = MODELS.reduce((accumulator, model) => {
-        accumulator[model.id] = set.has(model.id)
-          ? { status: 'err', error: e.message }
-          : { status: 'skipped' }
+        accumulator[model.id] = { status: 'err', error: e.message }
         return accumulator
       }, {})
       setTurns(prev => prev.map(turn => turn.id === turnId ? { ...turn, responses: errorResponses } : turn))
@@ -321,10 +273,6 @@ export default function Chat({
   }
 
   const activeModel = MODELS.find(model => model.className === viewModel) || MODELS[0]
-  const hasTurns = turns.length > 0
-  const hasAnyResponse = turns.some(turn =>
-    Object.values(turn.responses || {}).some(response => response?.status === 'ok')
-  )
 
   return (
     <div className="chat-panel">
@@ -333,70 +281,37 @@ export default function Chat({
           <span className="chat-panel-dot" />
           <div className="chat-panel-title-wrap">
             <span className="chat-panel-title">Rewrite Help</span>
-            <span className="chat-panel-subtitle">
-              {stageMeta.eyebrow}{query ? ` · ${query.length > 60 ? `${query.slice(0, 57)}…` : query}` : ''}
-            </span>
+            <span className="chat-panel-subtitle">{stageMeta.eyebrow}</span>
           </div>
         </div>
-        {hasAnyResponse && (
-          <div className="chat-panel-header-right">
-            <div className="model-seg-ctrl" role="group" aria-label="Select model">
-              {MODELS.filter(model => selectedModelIds.includes(model.id)).map(model => (
-                <button
-                  key={model.id}
-                  type="button"
-                  className={`model-seg-btn${viewModel === model.className ? ` active ${model.className}` : ''}`}
-                  onClick={() => setViewModel(model.className)}
-                >
-                  {model.label}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-      </div>
-
-      <div className="chat-model-picker" role="group" aria-label="Models to query">
-        <span className="chat-model-picker__label">Models</span>
-        <div className="chat-model-picker__chips">
-          {MODELS.map(model => {
-            const pressed = selectedModelIds.includes(model.id)
-            return (
+        <div className="chat-panel-header-right">
+          <div className="model-seg-ctrl" role="group" aria-label="Select model">
+            {MODELS.map(model => (
               <button
                 key={model.id}
                 type="button"
-                className="chat-model-chip"
-                aria-pressed={pressed}
-                onClick={() => toggleModel(model.id)}
-                title={pressed ? `Disable ${model.label}` : `Enable ${model.label}`}
+                className={`model-seg-btn${viewModel === model.className ? ` active ${model.className}` : ''}`}
+                onClick={() => setViewModel(model.className)}
               >
-                <span className="chat-model-chip__dot" aria-hidden="true" />
                 {model.label}
               </button>
-            )
-          })}
-        </div>
-        <span className="chat-model-picker__hint">
-          {selectedModelIds.length === MODELS.length ? 'All models on' : `${selectedModelIds.length} of ${MODELS.length} on`}
-        </span>
-      </div>
-
-      <div className="chat-context-strip">
-        <div>
-          <span className="kicker">Query</span>
-          <strong>{query || 'No target query yet'}</strong>
-        </div>
-        <div>
-          <span className="kicker">Stage</span>
-          <strong>{stageLabel(stage)}</strong>
-        </div>
-        <div>
-          <span className="kicker">Fix Source</span>
-          <strong>{fixSource || (draft ? 'Diagnostics draft' : 'Chat prompt')}</strong>
+            ))}
+          </div>
+          <span className="summary-pill ok">{MODELS.length} models live</span>
         </div>
       </div>
 
-      {!hasTurns && (
+      <div className="chat-panel-intro">
+        <div>
+          <div className="chat-panel-intro-title">{stageMeta.title}</div>
+          {stageMeta.description && (
+            <div className="chat-panel-intro-copy">{stageMeta.description}</div>
+          )}
+        </div>
+        <span className="chat-panel-model-badge">{activeModel.id} visible</span>
+      </div>
+
+      {turns.length === 0 && (
         <div className="chat-panel-chips">
           {chips.map(chip => (
             <button key={chip} className="chat-panel-chip" onClick={() => sendMessage(chip)}>
@@ -406,7 +321,7 @@ export default function Chat({
         </div>
       )}
 
-      {hasTurns && (
+      {turns.length > 0 && (
         <div className="chat-turns">
           {turns.map(turn => (
             <div key={turn.id} className="chat-turn-card">
@@ -428,6 +343,17 @@ export default function Chat({
             </div>
           ))}
           <div ref={bottomRef} />
+        </div>
+      )}
+
+      {turns.length > 0 && (
+        <div className="chat-utility-row">
+          <button className="chip" type="button" onClick={() => setShowTemplate(value => !value)}>
+            {showTemplate ? 'Hide template' : 'Template'}
+          </button>
+          <button className="chip" type="button" onClick={() => { setTurns([]); setError('') }}>
+            Clear
+          </button>
         </div>
       )}
 
@@ -454,27 +380,6 @@ export default function Chat({
           onKeyDown={e => e.key === 'Enter' && !e.shiftKey && sendMessage()}
           disabled={sending}
         />
-        <button
-          type="button"
-          className="chat-icon-btn"
-          onClick={() => setShowTemplate(value => !value)}
-          title={showTemplate ? 'Hide template' : 'Show template'}
-          aria-label={showTemplate ? 'Hide prompt template' : 'Show prompt template'}
-          aria-pressed={showTemplate}
-        >
-          T
-        </button>
-        {hasTurns && (
-          <button
-            type="button"
-            className="chat-icon-btn"
-            onClick={() => { setTurns([]); setError('') }}
-            title="Clear conversation"
-            aria-label="Clear conversation"
-          >
-            ×
-          </button>
-        )}
         <button
           className="chat-send-btn"
           onClick={() => sendMessage()}

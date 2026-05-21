@@ -3,7 +3,7 @@ import ReactDOM from 'react-dom/client'
 import App from './App.jsx'
 import './index.css'
 
-const initialTheme = window.localStorage.getItem('aeo-scorer-theme') || 'light'
+const initialTheme = window.localStorage.getItem('aeo-scorer-theme') || 'dark'
 document.documentElement.dataset.theme = initialTheme
 
 ReactDOM.createRoot(document.getElementById('root')).render(
