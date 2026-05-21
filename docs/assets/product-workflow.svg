@@ -1,0 +1,55 @@
+<svg width="1400" height="560" viewBox="0 0 1400 560" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="flowbg" x1="0" y1="0" x2="1400" y2="560" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#F6F3EE"/>
+      <stop offset="1" stop-color="#ECE4D8"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="1400" height="560" rx="28" fill="url(#flowbg)"/>
+  <text x="70" y="74" fill="#13202E" font-size="38" font-family="Arial, sans-serif" font-weight="700">How the product works</text>
+  <text x="70" y="108" fill="#4F6679" font-size="20" font-family="Arial, sans-serif">A pre-publish workflow from live page ingestion to rewrite guidance.</text>
+
+  <rect x="70" y="160" width="280" height="280" rx="26" fill="#FFFFFF" stroke="#D4C8B8"/>
+  <rect x="394" y="160" width="280" height="280" rx="26" fill="#FFFFFF" stroke="#D4C8B8"/>
+  <rect x="718" y="160" width="280" height="280" rx="26" fill="#FFFFFF" stroke="#D4C8B8"/>
+  <rect x="1042" y="160" width="280" height="280" rx="26" fill="#FFFFFF" stroke="#D4C8B8"/>
+
+  <circle cx="114" cy="204" r="22" fill="#0F8F7F"/>
+  <circle cx="438" cy="204" r="22" fill="#B88419"/>
+  <circle cx="762" cy="204" r="22" fill="#2F6DCC"/>
+  <circle cx="1086" cy="204" r="22" fill="#C86B3B"/>
+  <text x="108" y="211" fill="#FFFFFF" font-size="18" font-family="Arial, sans-serif" font-weight="700">1</text>
+  <text x="432" y="211" fill="#FFFFFF" font-size="18" font-family="Arial, sans-serif" font-weight="700">2</text>
+  <text x="756" y="211" fill="#FFFFFF" font-size="18" font-family="Arial, sans-serif" font-weight="700">3</text>
+  <text x="1080" y="211" fill="#FFFFFF" font-size="18" font-family="Arial, sans-serif" font-weight="700">4</text>
+
+  <text x="150" y="210" fill="#13202E" font-size="28" font-family="Arial, sans-serif" font-weight="700">Fetch</text>
+  <text x="474" y="210" fill="#13202E" font-size="28" font-family="Arial, sans-serif" font-weight="700">Baseline</text>
+  <text x="798" y="210" fill="#13202E" font-size="28" font-family="Arial, sans-serif" font-weight="700">Query test</text>
+  <text x="1122" y="210" fill="#13202E" font-size="28" font-family="Arial, sans-serif" font-weight="700">Rewrite</text>
+
+  <text x="102" y="264" fill="#4F6679" font-size="20" font-family="Arial, sans-serif">Pull live page content</text>
+  <text x="102" y="296" fill="#4F6679" font-size="20" font-family="Arial, sans-serif">through Jina, normalize</text>
+  <text x="102" y="328" fill="#4F6679" font-size="20" font-family="Arial, sans-serif">it to markdown, and</text>
+  <text x="102" y="360" fill="#4F6679" font-size="20" font-family="Arial, sans-serif">surface source signals.</text>
+
+  <text x="426" y="264" fill="#4F6679" font-size="20" font-family="Arial, sans-serif">Run Content, GEU,</text>
+  <text x="426" y="296" fill="#4F6679" font-size="20" font-family="Arial, sans-serif">and LLM baseline</text>
+  <text x="426" y="328" fill="#4F6679" font-size="20" font-family="Arial, sans-serif">scoring to judge</text>
+  <text x="426" y="360" fill="#4F6679" font-size="20" font-family="Arial, sans-serif">answer-engine readiness.</text>
+
+  <text x="750" y="264" fill="#4F6679" font-size="20" font-family="Arial, sans-serif">Score the page against</text>
+  <text x="750" y="296" fill="#4F6679" font-size="20" font-family="Arial, sans-serif">a specific target query,</text>
+  <text x="750" y="328" fill="#4F6679" font-size="20" font-family="Arial, sans-serif">calculate the gap, and</text>
+  <text x="750" y="360" fill="#4F6679" font-size="20" font-family="Arial, sans-serif">compare model verdicts.</text>
+
+  <text x="1074" y="264" fill="#4F6679" font-size="20" font-family="Arial, sans-serif">Turn the top gap and</text>
+  <text x="1074" y="296" fill="#4F6679" font-size="20" font-family="Arial, sans-serif">suggested fix into a</text>
+  <text x="1074" y="328" fill="#4F6679" font-size="20" font-family="Arial, sans-serif">rewrite plan with</text>
+  <text x="1074" y="360" fill="#4F6679" font-size="20" font-family="Arial, sans-serif">Ask The Expert.</text>
+
+  <path d="M350 300H394" stroke="#0F8F7F" stroke-width="5" stroke-linecap="round"/>
+  <path d="M674 300H718" stroke="#B88419" stroke-width="5" stroke-linecap="round"/>
+  <path d="M998 300H1042" stroke="#2F6DCC" stroke-width="5" stroke-linecap="round"/>
+</svg>
