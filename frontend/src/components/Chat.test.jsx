@@ -1,4 +1,4 @@
-import { render, screen, fireEvent } from '@testing-library/react'
+import { render, screen, fireEvent, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import Chat from './Chat.jsx'
 
@@ -37,15 +37,16 @@ describe('Chat', () => {
     fireEvent.click(screen.getByRole('button', { name: 'What AI usability signals are missing from this content?' }))
 
     expect(await screen.findByText(/Qwen answer with/)).toBeInTheDocument()
-    expect(screen.getByRole('group', { name: 'Select model' })).toBeInTheDocument()
+    const modelSelector = screen.getByRole('group', { name: 'Select model' })
+    expect(modelSelector).toBeInTheDocument()
     expect(screen.queryByText(/Nemotron answer with/)).not.toBeInTheDocument()
 
-    fireEvent.click(screen.getByRole('button', { name: 'Nemotron' }))
+    fireEvent.click(within(modelSelector).getByRole('button', { name: 'Nemotron' }))
 
     expect(await screen.findByText(/Nemotron answer with/)).toBeInTheDocument()
     expect(screen.queryByText(/Qwen answer with/)).not.toBeInTheDocument()
 
-    fireEvent.click(screen.getByRole('button', { name: 'GPT OSS' }))
+    fireEvent.click(within(modelSelector).getByRole('button', { name: 'GPT OSS' }))
 
     expect(await screen.findByText(/GPT OSS answer with/)).toBeInTheDocument()
   })
