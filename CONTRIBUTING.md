@@ -31,4 +31,3 @@ keep live benchmarks separate from the default verification path.
 - Never commit `.env` files or provider credentials.
 - Never commit generated agentic profiles, benchmark output, build artifacts,
   dependency directories, or local caches.
-
