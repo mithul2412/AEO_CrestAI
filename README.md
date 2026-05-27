@@ -1,4 +1,4 @@
-# Crest.Ai
+# Crest.AI
 
 > A pre-publish Answer Engine Optimization (AEO) workspace for evaluating whether a page is structured, grounded, and specific enough to be reused by AI answer engines.
 
@@ -9,7 +9,7 @@
 
 ![Crest.Ai product overview](docs/assets/product-overview.svg)
 
-## Why Crest.Ai
+## Why Crest.AI
 
 SEO tools explain rankings after publication. Crest.Ai focuses on the decision before publication: can an answer engine retrieve a page, understand its claims, trust its evidence, and extract a direct answer for a valuable query?
 
@@ -33,7 +33,7 @@ The application combines deterministic content checks with model-assisted evalua
 | Rewrite | What should the team change first? |
 | Agentic | Which machine-readable artifacts can be generated and approved? |
 
-![Crest.Ai workflow](docs/assets/product-workflow.svg)
+![Crest.AI workflow](docs/assets/product-workflow.svg)
 
 ## Architecture
 
