@@ -140,10 +140,9 @@ cd ../frontend && npm test && npm run build
 
 - [System architecture](docs/system-architecture.md)
 - [Current contracts](docs/current-contracts.md)
-- [Agentic workflow](docs/agentic-approval-workflow.md)
-- [Persistence and monitoring](docs/agentic-persistence-and-monitoring.md)
-- [Baseline test status](docs/baseline-test-status.md)
-- [Contributing](CONTRIBUTING.md)
+- [Agentic AI Readiness Layer](docs/AGENTIC_LAYER.md) — routes, artifacts, versioning, approval workflow, rescan, storage
+- [Project history & design notes](docs/PROJECT_HISTORY.md) — scoring model, UX flow, homepage and rebrand design passes
+- [Contributing, credits, and security](CONTRIBUTING.md)
 
 ## Status
 
