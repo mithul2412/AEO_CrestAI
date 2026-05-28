@@ -150,4 +150,4 @@ This repository is a portfolio-ready engineering snapshot. The deterministic tes
 
 ## License
 
-Licensed under the [MIT License](LICENSE).
+Licensed under the [MIT License](LICENSE)
