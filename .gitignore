@@ -1,4 +1,11 @@
 node_modules/
-.next/
-out/
+backend/.env
+dist/
 .DS_Store
+*.log
+*.zip
+.npm-cache/
+.tools/
+backend/benchmark-results/
+backend/data/agentic-profiles/**/*.json
+backend/data/agentic-profiles/*.json
