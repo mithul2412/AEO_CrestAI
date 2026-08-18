@@ -63,6 +63,8 @@ export function RunProvider({ children }) {
   const [error, setError] = useState('')
   const [theme, setTheme] = useState(getInitialTheme)
   const [chatDraft, setChatDraft] = useState({ text: '', token: 0 })
+  const [competitorQueries, setCompetitorQueries] = useState(null)
+  const [competitorQueryLoading, setCompetitorQueryLoading] = useState(false)
   const [querySuggestions, setQuerySuggestions] = useState([])
   const [querySuggestionsLoading, setQuerySuggestionsLoading] = useState(false)
   const [querySuggestionsMeta, setQuerySuggestionsMeta] = useState(null)
@@ -121,6 +123,8 @@ export function RunProvider({ children }) {
   const handleBaselineAnalyze = useCallback(async (nextMarkdown, nextSourceSignals = {}, nextPageIntelligence = null, nextNormalizedUrl = '') => {
     setContentAnalyzing(true)
     setError('')
+    setCompetitorQueries(null)
+    setCompetitorQueryLoading(true)
     try {
       const res = await fetch('/analyze', {
         method: 'POST',
@@ -134,12 +138,44 @@ export function RunProvider({ children }) {
       if (!res.ok) throw new Error(await readApiError(res, `Analyze error: ${res.status}`))
       const data = await res.json()
       setBaselineResults(mergeResultsWithBaseline(data, null))
-      void generateQuerySuggestions(nextMarkdown, nextPageIntelligence, nextNormalizedUrl)
     } catch (e) {
       setError(e.message)
     } finally {
       setContentAnalyzing(false)
     }
+
+    const sourceUrl = nextNormalizedUrl || nextSourceSignals?.sourceUrl || ''
+
+    function heuristicCompetitorQuery() {
+      const title = nextPageIntelligence?.extraction?.title || nextPageIntelligence?.extraction?.h1 || ''
+      const brand = title
+        .split(/[|–—]/)[0].trim()
+        .replace(/\b(pricing|plans|features|home|homepage|help|blog|docs)\b/gi, '')
+        .trim()
+        .split(/\s+/).slice(0, 3).join(' ')
+      if (brand) return `How does ${brand} compare to its competitors?`
+      try {
+        const hostname = new URL(sourceUrl).hostname.replace(/^www\./, '').split('.')[0]
+        return `How does ${hostname[0].toUpperCase() + hostname.slice(1)} compare to its competitors?`
+      } catch { return null }
+    }
+
+    fetch('/analyze/competitor-query', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        markdown: nextMarkdown,
+        sourceUrl,
+        pageIntelligence: nextPageIntelligence || {},
+      }),
+    })
+      .then(r => r.ok ? r.json() : Promise.reject(new Error(r.status)))
+      .then(d => { if (Array.isArray(d.queries) && d.queries.length) setCompetitorQueries(d.queries) })
+      .catch(() => {
+        const fallback = heuristicCompetitorQuery()
+        if (fallback) setCompetitorQueries([fallback])
+      })
+      .finally(() => setCompetitorQueryLoading(false))
   }, [generateQuerySuggestions])
 
   const handleFetchComplete = useCallback((nextMarkdown, nextCharCount, nextSourceSignals = {}, nextPageIntelligence = null, nextNormalizedUrl = '') => {
@@ -202,6 +238,8 @@ export function RunProvider({ children }) {
     setResults(null)
     setError('')
     setChatDraft({ text: '', token: 0 })
+    setCompetitorQueries(null)
+    setCompetitorQueryLoading(false)
   }, [])
 
   const sendDraftToChat = useCallback((draft) => {
@@ -219,6 +257,7 @@ export function RunProvider({ children }) {
     query, theme, baselineResults, results, activeResults,
     contentAnalyzing, queryAnalyzing, error,
     chatDraft, querySuggestions, querySuggestionsLoading, querySuggestionsMeta,
+    competitorQueries, competitorQueryLoading,
 
     // derived
     hasFetched, hasBaseline, hasQueryResults,
@@ -233,6 +272,7 @@ export function RunProvider({ children }) {
     url, normalizedUrl, markdown, charCount, sourceSignals, pageIntelligence,
     query, theme, baselineResults, results, activeResults,
     contentAnalyzing, queryAnalyzing, error, chatDraft, querySuggestions, querySuggestionsLoading, querySuggestionsMeta,
+    competitorQueries, competitorQueryLoading,
     hasFetched, hasBaseline, hasQueryResults,
     handleFetchComplete, handleAnalyze, handleBaselineAnalyze, generateQuerySuggestions,
     startNewTest, sendDraftToChat,

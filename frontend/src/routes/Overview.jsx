@@ -218,7 +218,7 @@ export default function Overview() {
     query, setQuery, handleAnalyze, queryAnalyzing, hasBaseline, hasQueryResults,
     url, normalizedUrl, sendDraftToChat,
     handleBaselineAnalyze, sourceSignals,
-    querySuggestions, querySuggestionsLoading, querySuggestionsMeta, generateQuerySuggestions,
+    competitorQueries, competitorQueryLoading,
   } = useRun()
 
   const [drillKey, setDrillKey] = useState(null)
@@ -627,31 +627,15 @@ export default function Overview() {
                   : hasQueryResults ? 'Re-run query' : 'Run query test'}
               </button>
             </div>
-            {!hasQueryResults && (
-              <>
-                <div className="suggestion-row">
-                  {querySuggestionsLoading && (
-                    <span className="caption">Generating target queries with Llama 3.3 70B…</span>
-                  )}
-                  {!querySuggestionsLoading && querySuggestions.map(tip => (
-                    <button key={tip} className="chip" onClick={() => setQuery(tip)}>{tip}</button>
-                  ))}
-                  {!querySuggestionsLoading && querySuggestionsMeta?.fallback && (
-                    <button
-                      type="button"
-                      className="chip"
-                      onClick={() => generateQuerySuggestions(markdown, pageIntelligence, normalizedUrl || url)}
-                    >
-                      Retry Llama suggestions
-                    </button>
-                  )}
-                </div>
-                {!querySuggestionsLoading && querySuggestionsMeta?.model && (
-                  <span className="caption">
-                    Suggested by {querySuggestionsMeta.model}{querySuggestionsMeta.fallback ? ' fallback' : ''}.
-                  </span>
-                )}
-              </>
+            {!hasQueryResults && (competitorQueryLoading || competitorQueries?.length > 0) && (
+              <div className="suggestion-row">
+                {competitorQueryLoading
+                  ? <span className="chip chip--muted" aria-busy="true">Generating suggestions…</span>
+                  : competitorQueries.map(q => (
+                      <button key={q} className="chip" onClick={() => setQuery(q)}>{q}</button>
+                    ))
+                }
+              </div>
             )}
             {error && <div className="error-bar">{error}</div>}
           </div>

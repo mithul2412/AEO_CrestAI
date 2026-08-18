@@ -3,7 +3,7 @@ import { useRun } from '../state/RunContext.jsx'
 import { LockedBlock } from '../components/primitives/StateBlocks.jsx'
 
 export default function Rewrite() {
-  const { hasFetched, markdown, query, results, chatDraft, pageIntelligence, querySuggestions, querySuggestionsLoading } = useRun()
+  const { hasFetched, markdown, query, results, chatDraft, pageIntelligence } = useRun()
 
   if (!hasFetched) {
     return (
@@ -37,8 +37,6 @@ export default function Rewrite() {
       draftToken={chatDraft.token}
       pageIntelligence={pageIntelligence}
       fixSource={fixSource}
-      querySuggestions={querySuggestions}
-      querySuggestionsLoading={querySuggestionsLoading}
     />
   )
 }
