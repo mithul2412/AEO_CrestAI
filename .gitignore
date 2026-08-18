@@ -1,4 +1,33 @@
+# Dependencies and build output
 node_modules/
-.next/
-out/
+dist/
+build/
+coverage/
+.vite/
+
+# Environment and local credentials
+.env
+.env.*
+!.env.example
+
+# Python prototypes and tooling
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+
+# Local tooling and operating-system files
 .DS_Store
+*.log
+*.zip
+.npm-cache/
+.tools/
+tmp/
+temp/
+
+# Generated application data
+backend/benchmark-results/
+backend/data/agentic-profiles/**/*.json
+backend/data/agentic-profiles/*.json

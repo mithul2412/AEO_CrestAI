@@ -1,0 +1,67 @@
+<svg width="1400" height="860" viewBox="0 0 1400 860" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1400" y2="860" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#071018"/>
+      <stop offset="1" stop-color="#0F1E2E"/>
+    </linearGradient>
+    <linearGradient id="card" x1="0" y1="0" x2="0" y2="1">
+      <stop stop-color="#122334"/>
+      <stop offset="1" stop-color="#0D1A28"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#74DFC1"/>
+      <stop offset="1" stop-color="#73AEFB"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="1400" height="860" rx="32" fill="url(#bg)"/>
+  <rect x="42" y="34" width="1316" height="792" rx="28" fill="#0B1521" stroke="#25384C"/>
+
+  <rect x="78" y="70" width="1244" height="56" rx="18" fill="#101C29" stroke="#223346"/>
+  <circle cx="114" cy="98" r="14" fill="#74DFC1"/>
+  <text x="142" y="104" fill="#EAF3FB" font-size="26" font-family="Arial, sans-serif" font-weight="700">AEO Scorer</text>
+  <text x="1172" y="104" fill="#93A9BD" font-size="18" font-family="Arial, sans-serif">Pre-publish answer engine review</text>
+
+  <rect x="78" y="152" width="1244" height="96" rx="24" fill="#101C29" stroke="#223346"/>
+  <text x="112" y="192" fill="#EAF3FB" font-size="20" font-family="Arial, sans-serif" font-weight="700">Analysis status</text>
+  <text x="112" y="220" fill="#94AABC" font-size="16" font-family="Arial, sans-serif">Fetch → Baseline → Verdicts</text>
+  <rect x="500" y="177" width="90" height="44" rx="22" fill="#17372F"/>
+  <rect x="624" y="177" width="110" height="44" rx="22" fill="#2B2414"/>
+  <rect x="770" y="177" width="96" height="44" rx="22" fill="#17372F"/>
+  <text x="530" y="204" fill="#74DFC1" font-size="16" font-family="Arial, sans-serif" font-weight="700">Fetch</text>
+  <text x="652" y="204" fill="#F4C264" font-size="16" font-family="Arial, sans-serif" font-weight="700">Baseline</text>
+  <text x="793" y="204" fill="#74DFC1" font-size="16" font-family="Arial, sans-serif" font-weight="700">Verdicts</text>
+  <text x="1060" y="204" fill="#EAF3FB" font-size="18" font-family="Arial, sans-serif">Score 61   Gap +12</text>
+
+  <rect x="78" y="276" width="1244" height="236" rx="28" fill="url(#card)" stroke="#223346"/>
+  <text x="112" y="322" fill="#93A9BD" font-size="18" font-family="Courier New, monospace" letter-spacing="3">OVERALL AEO SCORE</text>
+  <text x="112" y="446" fill="#F4C264" font-size="156" font-family="Arial, sans-serif" font-weight="700">61</text>
+  <text x="430" y="378" fill="#F4C264" font-size="28" font-family="Arial, sans-serif" font-weight="700">MODERATE</text>
+  <text x="430" y="424" fill="#DDE8F3" font-size="28" font-family="Arial, sans-serif">The page has usable structure,</text>
+  <text x="430" y="462" fill="#DDE8F3" font-size="28" font-family="Arial, sans-serif">but the answer path still needs work.</text>
+  <text x="430" y="504" fill="#91A6BA" font-size="24" font-family="Courier New, monospace">Content 70 / GEU 60 / LLM 66 / Query 48</text>
+
+  <rect x="82" y="540" width="614" height="246" rx="28" fill="#101C29" stroke="#223346"/>
+  <text x="112" y="586" fill="#EAF3FB" font-size="30" font-family="Arial, sans-serif" font-weight="700">Checks breakdown</text>
+  <text x="112" y="616" fill="#93A9BD" font-size="16" font-family="Arial, sans-serif">Explainable scoring signals behind the baseline score.</text>
+  <rect x="112" y="640" width="170" height="40" rx="20" fill="#17372F"/>
+  <rect x="292" y="640" width="130" height="40" rx="20" fill="#122334" stroke="#294155"/>
+  <text x="144" y="665" fill="#74DFC1" font-size="15" font-family="Arial, sans-serif" font-weight="700">CONTENT 4/7</text>
+  <text x="329" y="665" fill="#93A9BD" font-size="15" font-family="Arial, sans-serif" font-weight="700">GEU 3/4</text>
+  <rect x="112" y="700" width="540" height="56" rx="18" fill="#0D1A28" stroke="#24374B"/>
+  <text x="138" y="735" fill="#EAF3FB" font-size="20" font-family="Arial, sans-serif">Statistics / numbers</text>
+  <text x="542" y="735" fill="#74DFC1" font-size="18" font-family="Courier New, monospace">15 pts</text>
+  <rect x="120" y="718" width="10" height="20" rx="5" fill="#74DFC1"/>
+
+  <rect x="726" y="540" width="596" height="246" rx="28" fill="#101C29" stroke="#223346"/>
+  <text x="756" y="586" fill="#EAF3FB" font-size="30" font-family="Arial, sans-serif" font-weight="700">Query verdicts</text>
+  <text x="756" y="616" fill="#93A9BD" font-size="16" font-family="Arial, sans-serif">Model-level answer quality, top gap, and suggested fix.</text>
+  <rect x="756" y="642" width="250" height="120" rx="20" fill="#122338" stroke="#335377"/>
+  <rect x="1030" y="642" width="250" height="120" rx="20" fill="#2B1E18" stroke="#6A4A3D"/>
+  <text x="784" y="674" fill="#73AEFB" font-size="16" font-family="Courier New, monospace">LLAMA 3.3</text>
+  <text x="1058" y="674" fill="#FF9A6B" font-size="16" font-family="Courier New, monospace">NEMOTRON 120B</text>
+  <text x="784" y="724" fill="#EAF3FB" font-size="48" font-family="Arial, sans-serif" font-weight="700">48</text>
+  <text x="1058" y="724" fill="#EAF3FB" font-size="48" font-family="Arial, sans-serif" font-weight="700">52</text>
+  <text x="784" y="752" fill="#B7C8D8" font-size="16" font-family="Arial, sans-serif">Need a tighter opening answer.</text>
+  <text x="1058" y="752" fill="#B7C8D8" font-size="16" font-family="Arial, sans-serif">Needs sharper comparison framing.</text>
+</svg>
