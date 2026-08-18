@@ -1,171 +1,229 @@
-# Crest.Ai
+# Crest.Ai FastAPI v2 Prototype
 
-> A pre-publish Answer Engine Optimization (AEO) workspace for evaluating whether a page is structured, grounded, and specific enough to be reused by AI answer engines.
+> **Prototype status:** This branch is an experimental FastAPI/Python evolution of Crest.Ai. The supported portfolio release remains on [`main`](https://github.com/mithul2412/AEO_CrestAI/tree/main). This snapshot is published for architecture review and continued development; its live provider integrations require your own API credentials.
 
-[![CI](https://github.com/mithul2412/AEO_CrestAI/actions/workflows/ci.yml/badge.svg)](https://github.com/mithul2412/AEO_CrestAI/actions/workflows/ci.yml)
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![React](https://img.shields.io/badge/React-18-61dafb.svg)](frontend/package.json)
-[![Node.js](https://img.shields.io/badge/Node.js-22-339933.svg)](backend/package.json)
+Pre-publish analysis for teams that want to know whether a live page is ready for answer engines before it ships.
 
-![Crest.Ai product overview](docs/assets/product-overview.svg)
+## What This Product Does
 
-## Why Crest.Ai
+The AEO Pre-Publish Scorer helps teams evaluate whether a webpage is:
 
-SEO tools explain rankings after publication. Crest.Ai focuses on the decision before publication: can an answer engine retrieve a page, understand its claims, trust its evidence, and extract a direct answer for a valuable query?
+- structurally reusable by answer engines
+- strong enough on content quality and extractability
+- aligned to a specific high-value query
+- ready for rewriting, optimization, or launch
 
-The application combines deterministic content checks with model-assisted evaluation to turn that question into an actionable workflow:
+Instead of waiting for rankings or traffic signals after publication, the product gives teams a pre-publish decision layer.
 
-1. Fetch and normalize a live page through Jina.
-2. Score content structure, Generative Engine Usability (GEU), and citation readiness.
-3. Test a specific query against the page's strongest retrieved passages.
-4. Discover and ground competitor evidence with Tavily and Jina.
-5. Compare the page with competing answers and prioritize the largest gaps.
-6. Generate rewrite guidance in the built-in expert workspace.
-7. Produce optional agentic artifacts such as `llms.txt`, JSON-LD, FAQ markup, and approval-ready change sets.
+## Why It Matters
 
-## Product tour
+Search is shifting from links to answers. That means high-value pages need to be:
 
-| Area | What it answers |
-|---|---|
-| Overview | Is this page ready for answer engines? |
-| Source | Can crawlers access and reliably extract the page? |
-| Diagnostics | Which content, retrieval, and competitive signals are weak? |
-| Rewrite | What should the team change first? |
-| Agentic | Which machine-readable artifacts can be generated and approved? |
+- easier for AI systems to extract
+- easier to trust and cite
+- more direct for query-specific answers
+- easier for content teams to improve quickly
 
-![Crest.Ai workflow](docs/assets/product-workflow.svg)
+Traditional SEO tools are strong at rankings, keywords, and backlinks. This product focuses on a different problem: whether a page is usable by answer engines before it goes live.
 
-## Architecture
+## Who It Is For
 
-```text
-Browser
-  │
-  ▼
-React 18 + Vite SPA
-  │  fetch + Server-Sent Events
-  ▼
-Express API
-  ├── deterministic AEO and GEU scoring
-  ├── retrieval and citation analysis
-  ├── competitor mapping and gap analysis
-  └── agentic profile and artifact workflows
-       │
-       ├── Jina Reader
-       ├── OpenRouter model panel
-       └── Tavily search grounding
-```
+- SEO teams working on money pages
+- content strategists responsible for launch readiness
+- growth teams improving landing pages
+- agencies running AI-search or AEO audits
+- product marketing teams shipping pricing, comparison, and FAQ content
 
-The backend keeps deterministic scoring and fallbacks available when optional providers are unavailable. Provider-backed capabilities are isolated behind service modules so tests can run without live credentials.
+## Core Workflow
 
-## Technology
+1. Paste a live URL.
+2. Fetch the page as normalized markdown through Jina.
+3. Run baseline scoring:
+   Content Score, GEU Score, and citation readiness.
+4. Surface technical opportunities like schema and `llms.txt`.
+5. Enter a target query to test direct-answer quality.
+6. Compare user and competitor answer chunks, identify the top gap, and see the highest-impact fix.
+7. Continue the workflow in Ask The Expert to turn findings into rewrite guidance.
 
-- **Frontend:** React 18, React Router, Vite, Vitest, Testing Library
-- **Backend:** Node.js, Express, Jest, Server-Sent Events
-- **Retrieval and evidence:** Jina Reader, Tavily, lexical retrieval, context packing
-- **Model evaluation:** OpenRouter with configurable model fallbacks
-- **Agentic output:** versioned profiles, approval workflows, validation, and generated structured artifacts
+## Product Capabilities
 
-## Repository layout
+### 1. Live Page Fetch
+
+- Pulls live page content through Jina
+- Streams progress into the UI with SSE
+- Normalizes URL inputs
+- Probes `llms.txt` and `llms-full.txt`
+
+### 2. Baseline Readiness Scoring
+
+- **Content Score**
+  checks FAQ structure, numbers, citations, schema, comparison framing, fluency, and `llms.txt`
+- **GEU Score**
+  checks answer front-loading, standalone sentences, sourced claims, and coherence
+- **Citation Readiness**
+  combines access, extraction, hybrid retrieval, answer extraction, evidence, structure, freshness, and competitive gap signals
+- **Research-Backed Pre-Publish Evaluation**
+  adds AI feature eligibility, RAG-style fan-out coverage, GEO method coverage, structured-data integrity, and competitive pressure
+
+### 3. Query-Specific Scoring
+
+- Tests whether the page answers a specific query directly
+- Produces a Query Match score
+- Calculates `Content Score - Query Match Score` as the gap
+- Uses Qwen, Nemotron, and GPT-OSS via OpenRouter for model judgment
+- Compares your top retrieved chunk against readable competitor chunks from Tavily/Exa/Jina
+- Returns weak query variants and ranked priority actions for pre-publish optimization
+
+### 4. Rewrite Assistance
+
+- Lets users send a suggested fix straight into Ask The Expert
+- Preserves the page context inside chat
+- Supports Qwen, Nemotron, and GPT-OSS responses for rewrite guidance
+
+## Product View
+
+### What Makes It Useful
+
+- It is a decision tool, not just a reporting dashboard.
+- It combines explainable rule-based checks with model judgment.
+- It helps teams move from diagnosis to action in one flow.
+- It is especially useful for launch reviews, page refreshes, and content audits.
+
+### What It Can Help Teams Decide
+
+- Is this page structurally ready for AI answers?
+- Does this page answer the exact user question clearly enough?
+- What should we fix first?
+- Should this page be launched as-is, revised, or rewritten?
+
+## System Architecture
+
+The active system is intentionally lightweight:
+
+- **Frontend**
+  React + Vite single-page application
+- **Backend**
+  FastAPI SSE API with a 7-step backend AEO pipeline
+- **External Services**
+  Jina for page-to-markdown fetch, query/passage embeddings, and reranking; Tavily for grounded SERP discovery; Exa for competitor full text; OpenRouter for Qwen/Nemotron/GPT-OSS judging and rewriting
+
+Docs:
+
+- [AEO Method](docs/aeo-method.md)
+- [Research Basis](docs/research-basis.md)
+- [API Reference](docs/api.md)
+- [Operations](docs/operations.md)
+- [System Architecture](docs/system-architecture.md)
+
+## Repository Structure
 
 ```text
 backend/
-  agentic/       profile, validation, storage, and artifact workflows
-  routes/        fetch, analyze, and chat API routes
-  services/      retrieval, competitors, scoring, and provider adapters
-  tests/         deterministic unit and integration tests
+  main.py
+  routers/analyze.py
+  providers/
+    jina.py
+    tavily.py
+    exa.py
+    openrouter.py
+  pipeline/
+    original_aeo.py
+    access_intelligence.py
+    retrieval.py
+    citation_intelligence.py
+    competitive_gap.py
+    competitor_grounding.py
+    prepublish_evaluation.py
+    query_match.py
+    optimization.py
+    aeo_pipeline.py
+
 frontend/
-  src/routes/    Overview, Source, Diagnostics, Rewrite, and Agentic views
-  src/components reusable product and data-visualization components
-docs/            architecture, contracts, operations, and decision records
+  src/
+    components/
+      UrlInput.jsx
+      ScoreDisplay.jsx
+      Verdicts.jsx
+      Chat.jsx
+      InfoTip.jsx
+    App.jsx
+    index.css
 ```
 
-The original standalone investor demo is preserved on `archive/investor-demo-v0.1`. A separately tested FastAPI exploration is available on `prototype/fastapi-v2`; it is not the stable default application.
+## Tech Stack
 
-## Local setup
+- React
+- Vite
+- FastAPI
+- Node.js
+- Server-Sent Events
+- Tavily API
+- Exa API
+- OpenRouter API
+- Jina AI
+- Python unittest
 
-### Prerequisites
+## Local Development
 
-- Node.js 22.12 or newer
-- npm 10 or newer
-- Optional provider keys for live analysis
+Copy `backend/.env.example` to `backend/.env` and add your own credentials before using live integrations. The automated test suite does not require live provider calls.
 
-### Install
+### Backend
 
 ```bash
-git clone https://github.com/mithul2412/AEO_CrestAI.git
-cd AEO_CrestAI
-
 cd backend
-npm ci
-cp .env.example .env
-
-cd ../frontend
-npm ci
+.venv/bin/uvicorn main:app --reload --port 8000
 ```
 
-Edit `backend/.env` only when using live providers. The repository's automated tests do not require real credentials.
-
-### Run locally
+### Frontend
 
 ```bash
-# Terminal 1
-cd backend
-npm run dev
-
-# Terminal 2
 cd frontend
+npm install
 npm run dev
 ```
 
-The API listens on `http://localhost:3001`; the frontend listens on `http://localhost:5173`.
+Backend runs on `http://localhost:8000` and frontend runs on `http://localhost:5173`.
 
-### Verify
+## Environment Variables
+
+Backend expects:
 
 ```bash
-cd backend && npm test
-cd ../frontend && npm test && npm run build
+OPENROUTER_API_KEY=...
+JINA_API_KEY=...
+JINA_EMBEDDING_MODEL=jina-embeddings-v3
+JINA_RERANKER_MODEL=jina-reranker-v3
+TAVILY_API_KEY=...
+EXA_API_KEY=...
+GROQ_API_KEY=... # optional legacy Llama panel
 ```
 
-## Configuration
+## Current Product Positioning
 
-| Variable | Required | Purpose |
-|---|---:|---|
-| `OPENROUTER_API_KEY` | For model analysis | Primary model-panel credential |
-| `OPENROUTER_API_KEY_UW_MAIL` | No | Optional fallback credential |
-| `OPENROUTER_API_KEY_PERSONAL` | No | Optional fallback credential |
-| `JINA_API_KEY` | No | Enhanced page reading and retrieval |
-| `TAVILY_API_KEY` | No | Search presence and competitor evidence |
-| `ENABLE_AGENTIC_LAYER` | No | Enables agentic endpoints and UI |
-| `AGENTIC_PROFILE_STORAGE` | No | Selects in-memory or local-file profile storage |
+This product is best understood as:
 
-Never commit `backend/.env`. See [SECURITY.md](SECURITY.md) for disclosure and credential guidance.
+**A pre-publish AEO review tool for high-value pages**
 
-## My contributions
+It is strongest when used for:
 
-I worked across the scoring pipeline, product workflow, diagnostics experience, and query-specific competitor analysis. The preserved history includes these representative changes:
+- pricing pages
+- comparison pages
+- FAQ pages
+- product landing pages
+- service pages with commercial intent
 
-- [Optimization pipeline upgrade](https://github.com/mithul2412/AEO_CrestAI/commit/d566fb9878229dcfe8096de6b6dfe14bbfb20d39)
-- [Crest UI workflow](https://github.com/mithul2412/AEO_CrestAI/commit/cd8194f0d951e6e6079034ed059f8abaa6757848)
-- [Diagnostics information-architecture redesign](https://github.com/mithul2412/AEO_CrestAI/commit/338488c7afdc37bfcdb91525f5f1b8239c0a7093)
-- [AEO scorer overhaul: scoring, UI, suggestions, and competitor mind map](https://github.com/mithul2412/AEO_CrestAI/commit/ee6752dc82b37cbd2bc50824ebc66f0bd0efddf0)
-- [LLM-assisted competitor query generation](https://github.com/mithul2412/AEO_CrestAI/commit/150cdc50c0d494a62d604dac070ab3a020d559ec)
-- [Resilient fallback for competitor-query suggestions](https://github.com/mithul2412/AEO_CrestAI/commit/d35a24a5c3bc5911a3b4052e7d4f4b822f26519c)
+## Roadmap Direction
 
-Crest.Ai was developed collaboratively. Commit authorship and merge history are intentionally preserved; see [CREDITS.md](CREDITS.md) for project attribution.
+- saved analyses and history
+- before/after comparisons
+- multi-page batch analysis
+- shareable reports
+- CMS integrations
+- query sets per page
+- collaboration workflows for content teams
 
-## Documentation
+## Notes
 
-- [System architecture](docs/system-architecture.md)
-- [Current contracts](docs/current-contracts.md)
-- [Agentic workflow](docs/agentic-approval-workflow.md)
-- [Persistence and monitoring](docs/agentic-persistence-and-monitoring.md)
-- [Baseline test status](docs/baseline-test-status.md)
-- [Contributing](CONTRIBUTING.md)
-
-## Status
-
-This repository is a portfolio-ready engineering snapshot. The deterministic test suite and frontend build run in CI. Live quality depends on the configured providers, their availability, and the quality of the supplied page and query.
-
-## License
-
-Licensed under the [MIT License](LICENSE).
+- The scoring system is intentionally explainable and transparent.
+- Some scores are deterministic and rule-based; others come from model judgment.
+- The product is designed to support content review, not replace editorial judgment.
