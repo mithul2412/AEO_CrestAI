@@ -105,8 +105,8 @@ describe('App shell', () => {
   it('renders the focus gate with the wordmark and URL input on first load', () => {
     render(<App />)
 
-    expect(screen.getByText('Test AI citation readiness.')).toBeInTheDocument()
-    expect(screen.getByText('Crest.ai · AI Visibility Lab')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'See your page like an AI does.' })).toBeInTheDocument()
+    expect(screen.getByText(/Live · Free audit/i)).toBeInTheDocument()
     expect(screen.getByPlaceholderText(/example.com/)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /Fetch Page/i })).toBeInTheDocument()
   })
@@ -167,7 +167,7 @@ describe('App workflow integration', () => {
     fireEvent.click(analyzeBtn)
 
     await screen.findByRole('button', { name: /Re-run query/i })
-    expect(screen.queryByPlaceholderText(/e\.g\./i)).not.toBeInTheDocument()
+    expect(screen.getByPlaceholderText(/e\.g\./i)).toHaveValue('what is this page about?')
   })
 
   it('renders Diagnostics tabs after query scoring', async () => {
@@ -193,10 +193,9 @@ describe('App workflow integration', () => {
     await screen.findByRole('button', { name: /Re-run query/i })
     fireEvent.click(screen.getByRole('link', { name: /Diagnostics/i }))
 
-    expect(await screen.findByRole('tab', { name: /Verdict & Fix/i })).toBeInTheDocument()
+    expect(await screen.findByRole('tab', { name: /^Verdict$/i })).toBeInTheDocument()
     expect(screen.getByRole('tab', { name: /Answer Path/i })).toBeInTheDocument()
-    expect(screen.getByRole('tab', { name: /Competitor Map/i })).toBeInTheDocument()
-    expect(screen.getByRole('tab', { name: /Model Reads/i })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: /^Market$/i })).toBeInTheDocument()
   })
 
   it('Enter key in initial query input is gated by baseline/query conditions', async () => {
@@ -233,7 +232,7 @@ describe('App workflow integration', () => {
   it('shows an error message when baseline analysis fails', async () => {
     fetch
       .mockResolvedValueOnce(createJsonResponse(FETCH_RESPONSE))
-      .mockResolvedValueOnce(createJsonResponse({ error: 'Service unavailable' }, 503))
+      .mockResolvedValue(createJsonResponse({ error: 'Service unavailable' }, 503))
 
     render(<App />)
 
