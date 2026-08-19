@@ -142,7 +142,7 @@ cd ../frontend && npm test && npm run build
 - [Current contracts](docs/current-contracts.md)
 - [Agentic AI Readiness Layer](docs/AGENTIC_LAYER.md) — routes, artifacts, versioning, approval workflow, rescan, storage
 - [Project history & design notes](docs/PROJECT_HISTORY.md) — scoring model, UX flow, homepage and rebrand design passes
-- [Contributing, credits, and security](CONTRIBUTING.md)
+- [Contributing and security](CONTRIBUTING.md)
 
 ## Status
 
